@@ -348,8 +348,8 @@ class Continuous_outcome:
         --------
         A results dictionary with entries for each of these three
         categories:
-        - nLVO
-        - LVO not treated with MT
+        - nLVO treated with IVT
+        - LVO treated with IVT
         - LVO treated with MT
         Each category contains the following info:
         - each_patient_post_stroke_mrs_dist
@@ -361,8 +361,6 @@ class Continuous_outcome:
         - no_effect_mean_utility
         - each_patient_post_stroke_mean_utility
         - each_patient_mean_added_utility
-        - proportion_of_this_stroke_type_improved
-        - proportion_of_whole_cohort_improved
         - mean_valid_patients_mean_mrs_shift
         - mean_valid_patients_mean_added_utility'
 
@@ -381,7 +379,6 @@ class Continuous_outcome:
         - mean_mrs_shift                                        1 float
         - mean_utility                                          1 float
         - mean_added_utility                                    1 float
-        - proportion_improved                                   1 float
         """
         # ##### Sanity checks #####
 
