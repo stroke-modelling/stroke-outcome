@@ -3,13 +3,14 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - numpy=1.21.0
-  - pandas=1.4.2
-  - pip=21.2.4
-  - python=3.9.16
-  - importlib_resources=6.0.0
+  - numpy>=1.21.0
+  - pandas
+  - pip
+  - python
+  - importlib_resources
+  - stroke-outcome
   - pip:
-    - jupyterlab==3.4.4
-    - setuptools>=68.0.0
-    - twine>=4.0.0
-    - wheel>=0.41.0
+    - jupyterlab
+    - setuptools
+    - twine
+    - wheel

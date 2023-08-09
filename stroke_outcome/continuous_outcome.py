@@ -809,7 +809,7 @@ class Continuous_outcome:
         # Calculate fraction of time to no effect passed
         frac_to_no_effect = time_to_treatment_mins / time_no_effect_mins
 
-        # Combine t=0 and no effect distributions based on time past
+        # Combine t=0 and no effect distributions based on time passed
         treated_logodds = ((frac_to_no_effect * no_effect_logodds) +
                            ((1 - frac_to_no_effect) * t0_logodds))
 

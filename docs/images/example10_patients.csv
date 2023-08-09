@@ -1,0 +1,11 @@
+Patient,Stroke type,Treated with IVT,Onset to IVT time (minutes),Treated with MT,Onset to MT time (minutes)
+A,nLVO,Yes,180,No,-
+B,nLVO,Yes,90,No,-
+C,LVO,Yes,240,Yes,270
+D,nLVO,No,-,No,-
+E,nLVO,No,-,No,-
+F,LVO,No,-,No,-
+G,LVO,No,-,Yes,300
+H,nLVO,Yes,300,No,-
+I,nLVO,Yes,300,Yes,320
+J,Other,No,-,No,-
