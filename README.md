@@ -50,7 +50,7 @@ A conda environment file, `environment.yml`, is provided in the [GitHub reposito
 
 __Continuous outcomes:__
   + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demonstration: minimal example of running the code.][jupyternotebook-continuous-link] 
-  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Documentation: simple example of what the code calculates.][documentation-continuous-link]
+  + [![Jupyter Notebook][jupyternotebook-img]][documentation-continuous-link] [Documentation: simple example of what the code calculates.][documentation-continuous-link]
 
 
 
