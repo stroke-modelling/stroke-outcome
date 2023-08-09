@@ -49,8 +49,8 @@ The following resources are not included within the package files and are access
 A conda environment file, `environment.yml`, is provided in the [GitHub repository][github-link] for use with the demonstration Jupyter notebooks.
 
 __Continuous outcomes:__
-  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demonstration Jupyter notebook][jupyternotebook-continuous-link] 
-  + [TO DO]: A worked example of how the code actually works.
+  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demonstration: minimal example of running the code.][jupyternotebook-continuous-link] 
+  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Documentation: simple example of what the code calculates.][documentation-continuous-link]
 
 
 
@@ -62,3 +62,4 @@ __Continuous outcomes:__
 
 [jupyternotebook-img]: https://img.shields.io/badge/jupyter-%23FA0F00.svg?style=for-the-badge&logo=jupyter&logoColor=white
 [jupyternotebook-continuous-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/demo/demo_continuous_outcomes.ipynb
+[documentation-continuous-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/docs/docs_continuous_outcome.ipynb
