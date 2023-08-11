@@ -1,7 +1,7 @@
 # Stroke outcome
 
 
-[![GitHub Badge][github-img]][github-link] [![Jupyter Book Badge][jupyterbooks-img]][jupyterbooks-link] ![PyPI][pypi-link]
+[![GitHub Badge][github-img]][github-link] [![Jupyter Book Badge][jupyterbooks-img]][jupyterbooks-link] [![PyPI][pypi-img]][pypi-link]
 
 Toolkit for calculating patient outcomes after stroke depending on time to treatment.
 
@@ -69,7 +69,8 @@ __Continuous outcomes:__
 [github-img]: https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white
 [github-link]: https://github.com/stroke-modelling/stroke-outcome/
 
-[pypi-link]: https://img.shields.io/pypi/v/stroke-outcome?label=pypi%20package
+[pypi-img]: https://img.shields.io/pypi/v/stroke-outcome?label=pypi%20package
+[pypi-link]: https://pypi.org/project/stroke-outcome/
 
 [jupyterbooks-img]: https://jupyterbook.org/badge.svg
 [jupyterbooks-link]: https://samuel-book.github.io/stroke_outcome/intro.html
