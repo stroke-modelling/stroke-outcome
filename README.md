@@ -1,16 +1,26 @@
 # Stroke outcome
 
 
-[![GitHub Badge][github-img]][github-link] [![Jupyter Book Badge][jupyterbooks-img]][jupyterbooks-link] 
+[![GitHub Badge][github-img]][github-link] [![Jupyter Book Badge][jupyterbooks-img]][jupyterbooks-link] ![PyPI][pypi-link]
 
 Toolkit for calculating patient outcomes after stroke depending on time to treatment.
 
 + __Source code:__ https://github.com/stroke-modelling/stroke-outcome/
 + __Full background and methods:__ https://samuel-book.github.io/stroke_outcome/intro.html
++ __PyPI package:__ https://pypi.org/project/stroke-outcome/
 + __Parent project:__ https://github.com/stroke-modelling
 
-## Motivation in brief:
+## Get started
 
+This toolkit works with Python versions 3.8 and up.
+
+Install the package with:
+
+    pip install stroke-outcome
+
+And follow the links to the code demonstrations in the "External resources" section below.
+
+## Motivation in brief:
 
 Disability levels may be measured in various ways. In this project we are using the modified Rankin Scale (mRS). It is a commonly used scale for measuring the degree of disability or dependence in the daily activities of people who have suffered a stroke. The scale runs from 0-6, running from perfect health without symptoms to death.
 
@@ -31,7 +41,7 @@ The method is built by synthesising data from multiple sources to define the dis
 
 For more details, please see [the online book][jupyterbooks-link].
 
-## Package details:
+## :package: Package details:
 The package includes the following data:
 + mRS cumulative probability distributions as derived in [the online book][jupyterbooks-link].
 + A selection of utility scores for each mRS level.
@@ -42,20 +52,24 @@ The package includes the following processes:
 + __Continuous outcomes:__ Each "patient" uses the population mRS probability distribution rather than being assigned a single mRS score.
 
 
-## External resources
+## :books: External resources
 
 The following resources are not included within the package files and are accessible on the GitHub repository.
+
+Each major aspect of the package has a __demonstration__ and a __documentation__ file. The demonstration is a minimal example of running the code, and the documentation uses a simple example to show the concepts behind the methods.
 
 A conda environment file, `environment.yml`, is provided in the [GitHub repository][github-link] for use with the demonstration Jupyter notebooks.
 
 __Continuous outcomes:__
-  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demonstration: minimal example of running the code.][jupyternotebook-continuous-link] 
-  + [![Jupyter Notebook][jupyternotebook-img]][documentation-continuous-link] [Documentation: simple example of what the code calculates.][documentation-continuous-link]
+  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demonstration][jupyternotebook-continuous-link] 
+  + [![Jupyter Notebook][jupyternotebook-img]][documentation-continuous-link] [Documentation][documentation-continuous-link]
 
 
 
 [github-img]: https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white
 [github-link]: https://github.com/stroke-modelling/stroke-outcome/
+
+[pypi-link]: https://img.shields.io/pypi/v/stroke-outcome?label=pypi%20package
 
 [jupyterbooks-img]: https://jupyterbook.org/badge.svg
 [jupyterbooks-link]: https://samuel-book.github.io/stroke_outcome/intro.html
