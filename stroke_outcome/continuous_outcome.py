@@ -2,7 +2,12 @@ import numpy as np
 import pandas as pd
 
 from .evaluated_array import Evaluated_array
-from .outcome_utilities import calculate_mRS_dist_at_treatment_time
+from .outcome_utilities import \
+    _calculate_probs_at_treatment_time, \
+    _merge_results_dicts, \
+    calculate_patient_population_stats, \
+    sanity_check_input_mrs_dists, \
+    extract_mrs_probs_and_logodds
 
 
 class Continuous_outcome:
@@ -57,7 +62,7 @@ class Continuous_outcome:
     - treated_population_mean_valid_patients_mean_mrs_shift
     - treated_population_mean_valid_patients_mean_added_utility
 
-    The patient_array_outcomes results dictionary
+    The full_cohort_outcomes results dictionary
     takes the results from the separate results dictionaries and
     pulls out the relevant parts for each patient category
     (nLVO+IVT, LVO+IVT, LVO+MT).
@@ -117,20 +122,20 @@ class Continuous_outcome:
     Usage:
     ------
     Update the arrays of patient details in the trial dictionary.
-    Each will run the sanity checks in the Patient_array class
+    Each will run the sanity checks in the Evaluated_array class
     and display an error message if invalid data is passed in.
     Then run the main calculate_outcomes() function.
     Example:
         # Initiate the object:
         continuous_outcome = Continuous_outcome(
             mrs_dists={pandas dataframe}, number_of_patients=100)
-        # Import patient array data:
+        # Import patient data:
         continuous_outcome.trial['onset_to_needle_mins'].data = {array 1}
         continuous_outcome.trial['ivt_chosen_bool'].data = {array 2}
         continuous_outcome.trial['stroke_type_code'].data = {array 3}
         # Calculate outcomes:
-        results_by_stroke_type, patient_array_outcomes = \
-            continuous_outcome.calculate_outcomes()
+        results_by_stroke_type, full_cohort_outcomes = (
+            continuous_outcome.calculate_outcomes())
 
 
     Limitations and notes:
@@ -142,12 +147,12 @@ class Continuous_outcome:
 
     Some patients receive both IVT and MT. Separate outcomes are calculated
     for each case and stored in the LVO+IVT and LVO+MT arrays. However in the
-    combined patient array outcomes, only one of the sets of outcomes can be
+    combined full cohort outcomes, only one of the sets of outcomes can be
     used. The chosen set is the one with the better improvement in outcomes.
     The separate LVO+IVT and LVO+MT arrays are then *not* updated to remove
     the rejected set of outcomes, so any mean shifts in values across the
     LVO+IVT group (for example) will include data that was not actually used
-    in the combined patient array outcomes.
+    in the combined full cohort outcomes.
 
     Internally, stroke types are referred to by a number rather than their
     full name. The codes are:
@@ -184,7 +189,7 @@ class Continuous_outcome:
         - Weights for converting mRS score to utility
 
         Initialises arrays of patient data for:
-          - Stroke type (code: 0 ICH, 1 nLVO, 2 LVO)
+          - Stroke type (code: 0 "other" stroke types, 1 nLVO, 2 LVO)
           - Time to IVT (minutes)
           - Treated with IVT (True/False)
           - Time to MT (minutes)
@@ -198,40 +203,15 @@ class Continuous_outcome:
         """
         self.name = "Continuous clinical outcome model"
 
-        # ##### Checks for mRS dists #####
-        # Check that everything in the mRS dist arrays is a number.
-        # Check that the dtype of each column of data is int or float.
-        check_all_mRS_values_are_numbers_bool = np.all(
-            [((np.dtype(mrs_dists[d]) == np.dtype('float')) |
-              (np.dtype(mrs_dists[d]) == np.dtype('int')))
-             for d in mrs_dists.columns]
-        )
-        if check_all_mRS_values_are_numbers_bool is False:
-            exc_string = '''Some of the input mRS values are not numbers'''
-            raise TypeException(exc_string) from None
-
-        # Check that the pandas array has a named index column.
-        if mrs_dists.index.dtype not in ['O']:
-            print('The input mRS distributions might be improperly labelled.')
-            # Just print warning, don't stop the code.
-
+        sanity_check_input_mrs_dists(mrs_dists)
         # Store the input for the repr() string.
         self.mrs_dists_input = mrs_dists
 
         #
         # ##### Set up model parameters #####
         # Store modified Rankin Scale distributions as arrays in dictionary
-        self.mrs_distribution_probs = dict()
-        self.mrs_distribution_logodds = dict()
-
-        for index, row in mrs_dists.iterrows():
-            p = np.array([row[f'mRS<={str(x)}'] for x in range(7)])
-            self.mrs_distribution_probs[index] = p
-            # Remove a tiny amount to prevent division by zero.
-            p[np.where(p == 1.0)] = 1.0 - 1e-10
-            # Convert to log odds
-            o = p / (1 - p)
-            self.mrs_distribution_logodds[index] = np.log(o)
+        self.mrs_distribution_probs, self.mrs_distribution_logodds = \
+            extract_mrs_probs_and_logodds(mrs_dists)
 
         # Set general model parameters
         self.ivt_time_no_effect_mins = ivt_time_no_effect_mins
@@ -252,7 +232,7 @@ class Continuous_outcome:
                 ]))
 
         #
-        # ##### Patient array setup #####
+        # ##### Patient data setup #####
         # All arrays must contain this many values:
         self.number_of_patients = number_of_patients
 
@@ -301,16 +281,8 @@ class Continuous_outcome:
         print_str += ''.join([
             '\n',
             'The easiest way to create the results dictionaries is:\n',
-            '  results_by_stroke_type, patient_array_outcomes = ',
+            '  results_by_stroke_type, full_cohort_outcomes = ',
             'continuous_outcome.calculate_outcomes()'
-            ])
-        print_str += ''.join([
-            '\n',
-            'To see the current patient population statistics, run:\n',
-            '  continuous_outcome.print_patient_population_stats()\n',
-            'The data printed can then be accessed in these attributes:\n',
-            '- nLVO_dict\n',
-            '- LVO_dict\n',
             ])
         return print_str
 
@@ -333,6 +305,39 @@ class Continuous_outcome:
             f'  values: {repr(self.mrs_dists_input.values)}'
             ])
 
+    def assign_ivt_no_effect(self):
+        """
+        Assign which patients receive IVT after the no effect time.
+        """
+        # From inputs, calculate which patients are treated too late
+        # for any effect. Recalculate this on each run in case any
+        # of the patient data arrays have changed since the last run.
+        self.trial['ivt_no_effect_bool'].data = (
+            (self.trial['ivt_chosen_bool'].data > 0) &
+            (self.trial['onset_to_needle_mins'].data >=
+             self.ivt_time_no_effect_mins)
+            )
+
+    def assign_mt_no_effect(self):
+        """
+        Assign which patients receive MT after the no effect time.
+        """
+        # From inputs, calculate which patients are treated too late
+        # for any effect. Recalculate this on each run in case any
+        # of the patient data arrays have changed since the last run.
+        self.trial['mt_no_effect_bool'].data = (
+            (self.trial['mt_chosen_bool'].data > 0) &
+            (self.trial['onset_to_puncture_mins'].data >=
+             self.mt_time_no_effect_mins)
+            )
+
+    """
+    ################
+    ##### MAIN #####
+    ################
+
+    This function runs everything important to find the final results.
+    """
     def calculate_outcomes(self):
         """
         Calls methods to model mRS populations for:
@@ -365,7 +370,7 @@ class Continuous_outcome:
         - mean_valid_patients_mean_mrs_shift
         - mean_valid_patients_mean_added_utility'
 
-        The patient_array_outcomes results dictionary
+        The full_cohort_outcomes results dictionary
         takes the results from the separate results dictionaries and
         pulls out the relevant parts for each patient category
         (nLVO+IVT, LVO+IVT, LVO+MT).
@@ -405,7 +410,7 @@ class Continuous_outcome:
             self.trial['mt_no_effect_bool'].data
             ]
         length_warning_str = ''.join([
-            'The following patient arrays contain a different number ',
+            'The following patient data arrays contain a different number ',
             'of patients than the instance value of ',
             f'{self.number_of_patients}:',
             '\n'
@@ -433,50 +438,75 @@ class Continuous_outcome:
             new_stroke_types[inds_nLVO_and_MT] = 2
             self.trial['stroke_type_code'].data = new_stroke_types
 
+        # Determine who receives treatment too late for any effect:
+        self.assign_ivt_no_effect()
+        self.assign_mt_no_effect()
+
         # ##### Statistics #####
         # Function to create dictionaries of patient statistics
-        # for nLVO and LVO patients (nLVO_dict and LVO_dict).
-        self.nLVO_dict = self._make_stats_dict(stroke_type_code=1)
-        self.LVO_dict = self._make_stats_dict(stroke_type_code=2)
+        # for each stroke type. The dataframes (_df) contain the same
+        # information but organised into a table for easier reading.
+        (self.nLVO_dict,
+         self.LVO_dict,
+         self.other_stroke_types_dict,
+         self.nLVO_df,
+         self.LVO_df,
+         self.other_stroke_types_df
+         ) = calculate_patient_population_stats(self.trial)
 
         # ##### Calculations #####
         # Get treatment results
-        lvo_ivt_outcomes = self.calculate_outcomes_for_lvo_ivt()
-        lvo_mt_outcomes = self.calculate_outcomes_for_lvo_mt()
-        nlvo_ivt_outcomes = self.calculate_outcomes_for_nlvo_ivt()
+        # These post-stroke mRS distributions are the same for any
+        # measure of change of outcome...
+        post_stroke_probs_lvo_ivt = \
+            self.calculate_post_stroke_mrs_dists_for_lvo_ivt()
+        post_stroke_probs_lvo_mt = \
+            self.calculate_post_stroke_mrs_dists_for_lvo_mt()
+        post_stroke_probs_nlvo_ivt = \
+            self.calculate_post_stroke_mrs_dists_for_nlvo_ivt()
+        # ... and these outcome dictionaries are specific to this
+        # measure of change of outcome:
+        lvo_ivt_outcomes = self.calculate_outcomes_dict_for_lvo_ivt(
+            post_stroke_probs_lvo_ivt)
+        lvo_mt_outcomes = self.calculate_outcomes_dict_for_lvo_mt(
+            post_stroke_probs_lvo_mt)
+        nlvo_ivt_outcomes = self.calculate_outcomes_dict_for_nlvo_ivt(
+            post_stroke_probs_nlvo_ivt)
 
         # Gather results into one dictionary:
-        results = self._merge_results_dicts(
+        outcomes_by_stroke_type_and_treatment = _merge_results_dicts(
             [lvo_ivt_outcomes, lvo_mt_outcomes, nlvo_ivt_outcomes],
             ['lvo_ivt', 'lvo_mt', 'nlvo_ivt'],
             )
 
-        # Get the mean results for the actual patient array:
-        patient_array_outcomes = self._calculate_patient_outcomes(results)
-        return results, patient_array_outcomes
+        # Get the mean results for the actual patient cohort:
+        full_cohort_outcomes = self._calculate_patient_outcomes(
+            outcomes_by_stroke_type_and_treatment)
+        return outcomes_by_stroke_type_and_treatment, full_cohort_outcomes
 
-    def calculate_outcomes_for_lvo_ivt(self):
+    """
+    ####################
+    ##### WRAPPERS #####
+    ####################
+
+    This block of functions contains wrappers. The functions here
+    gather variables and pass them to other functions to do the
+    actual calculations.
+
+    Scroll down if you're looking for the calculations!
+
+    The wrappers are for:
+    + _calculate_probs_at_treatment_time()
+    + _calculate_outcomes_dict()
+      + ... which is itself a wrapper(!!) for
+        _create_mrs_utility_dict().
+    """
+    def calculate_post_stroke_mrs_dists_for_lvo_ivt(self):
         """
-        Calculate post-stroke outcomes for LVO treated with IVT.
+        Wrapper for _calculate_probs_at_treatment_time() for LVO+IVT.
 
-        Outputs:
-        A dictionary containing the following:
-        - each_patient_post_stroke_mrs_dist
-        - not_treated_mean_mrs
-        - no_effect_mean_mrs
-        - each_patient_post_stroke_mean_mrs
-        - each_patient_mean_mrs_shift
-        - not_treated_mean_utility
-        - no_effect_mean_utility
-        - each_patient_post_stroke_mean_utility
-        - each_patient_mean_added_utility
-        - proportion_of_whole_cohort_improved
-        - mean_valid_patients_mean_mrs_shift
-        - mean_valid_patients_mean_added_utility
-        - treated_population_mean_valid_patients_mean_mrs_shift
-        - treated_population_mean_valid_patients_mean_added_utility
+        Calculate post-stroke mRS dists for LVO treated with IVT.
         """
-
         try:
             # Get relevant distributions
             not_treated_probs = \
@@ -492,19 +522,10 @@ class Continuous_outcome:
             raise KeyError(
                 'Need to create LVO mRS distributions first.')
 
-        # From inputs, calculate which patients are treated too late
-        # for any effect. Recalculate this on each run in case any
-        # of the patient arrays have changed since the last run.
-        self.trial['ivt_no_effect_bool'].data = (
-            (self.trial['ivt_chosen_bool'].data > 0) &
-            (self.trial['onset_to_needle_mins'].data >=
-             self.ivt_time_no_effect_mins)
-            )
-
         # Create an x by 7 grid of mRS distributions,
         # one row of 7 mRS values for each of x patients.
-        mask_valid = (self.trial['stroke_type_code'].data == 2)  # LVO
-        post_stroke_probs = self._calculate_probs_at_treatment_time(
+        mask_valid = (self.trial['stroke_type_code'].data == 2)
+        post_stroke_probs = _calculate_probs_at_treatment_time(
             t0_logodds,
             no_effect_logodds,
             self.trial['onset_to_needle_mins'].data,
@@ -515,51 +536,13 @@ class Continuous_outcome:
             not_treated_probs,
             no_effect_probs
             )
+        return post_stroke_probs
 
-        # Find mean mRS and utility values in these results dictionary.
-        # The results for all patients...
-        results_dict = self._create_mrs_utility_dict(
-            post_stroke_probs,
-            not_treated_probs,
-            no_effect_probs
-            )
-        # ... and for only the patients who were treated:
-        results_treated_dict = self._create_mrs_utility_dict(
-            post_stroke_probs[self.trial['ivt_chosen_bool'].data == 1, :],
-            not_treated_probs,
-            no_effect_probs
-            )
-        # Merge the two dictionaries:
-        keys_to_merge = [
-            'mean_valid_patients_mean_mrs_shift',
-            'mean_valid_patients_mean_added_utility'
-            ]
-        for key in keys_to_merge:
-            results_dict['treated_population_' + key] = (
-                results_treated_dict[key])
-
-        return results_dict
-
-    def calculate_outcomes_for_lvo_mt(self):
+    def calculate_post_stroke_mrs_dists_for_lvo_mt(self):
         """
-        Calculate post-stroke outcomes for LVO treated with MT.
+        Wrapper for _calculate_probs_at_treatment_time() for LVO+MT.
 
-        Outputs:
-        A dictionary containing the following:
-        - each_patient_post_stroke_mrs_dist
-        - not_treated_mean_mrs
-        - no_effect_mean_mrs
-        - each_patient_post_stroke_mean_mrs
-        - each_patient_mean_mrs_shift
-        - not_treated_mean_utility
-        - no_effect_mean_utility
-        - each_patient_post_stroke_mean_utility
-        - each_patient_mean_added_utility
-        - proportion_of_whole_cohort_improved
-        - mean_valid_patients_mean_mrs_shift
-        - mean_valid_patients_mean_added_utility
-        - treated_population_mean_valid_patients_mean_mrs_shift
-        - treated_population_mean_valid_patients_mean_added_utility
+        Calculate post-stroke mRS dists for LVO treated with MT.
         """
         try:
             # Get relevant distributions
@@ -576,19 +559,10 @@ class Continuous_outcome:
             raise KeyError(
                 'Need to create LVO mRS distributions first.')
 
-        # From inputs, calculate which patients are treated too late
-        # for any effect. Recalculate this on each run in case any
-        # of the patient arrays have changed since the last run.
-        self.trial['mt_no_effect_bool'].data = (
-            (self.trial['mt_chosen_bool'].data > 0) &
-            (self.trial['onset_to_puncture_mins'].data >=
-             self.mt_time_no_effect_mins)
-            )
-
         # Create an x by 7 grid of mRS distributions,
         # one row of 7 mRS values for each of x patients.
         mask_valid = (self.trial['stroke_type_code'].data == 2)
-        post_stroke_probs = self._calculate_probs_at_treatment_time(
+        post_stroke_probs = _calculate_probs_at_treatment_time(
             t0_logodds,
             no_effect_logodds,
             self.trial['onset_to_puncture_mins'].data,
@@ -599,34 +573,144 @@ class Continuous_outcome:
             not_treated_probs,
             no_effect_probs
             )
+        return post_stroke_probs
 
-        # Find mean mRS and utility values in these results dictionary.
-        # The results for all patients...
-        results_dict = self._create_mrs_utility_dict(
+    def calculate_post_stroke_mrs_dists_for_nlvo_ivt(self):
+        """
+        Wrapper for _calculate_probs_at_treatment_time() for nLVO+IVT.
+
+        Calculate post-stroke mRS dists for nLVO treated with IVT.
+        """
+        try:
+            # Get relevant distributions
+            not_treated_probs = \
+                self.mrs_distribution_probs['no_treatment_nlvo']
+            no_effect_probs = \
+                self.mrs_distribution_probs['no_effect_nlvo_ivt_deaths']
+            no_effect_logodds = \
+                self.mrs_distribution_logodds[
+                    'no_effect_nlvo_ivt_deaths']
+            t0_logodds = \
+                self.mrs_distribution_logodds['t0_treatment_nlvo_ivt']
+        except KeyError:
+            raise KeyError(
+                'Need to create nLVO mRS distributions first.')
+
+        # Create an x by 7 grid of mRS distributions,
+        # one row of 7 mRS values for each of x patients.
+        mask_valid = (self.trial['stroke_type_code'].data == 1)
+        post_stroke_probs = _calculate_probs_at_treatment_time(
+            t0_logodds,
+            no_effect_logodds,
+            self.trial['onset_to_needle_mins'].data,
+            self.ivt_time_no_effect_mins,
+            self.trial['ivt_chosen_bool'].data,
+            self.trial['ivt_no_effect_bool'].data,
+            mask_valid,
+            not_treated_probs,
+            no_effect_probs
+            )
+        return post_stroke_probs
+
+    def calculate_outcomes_dict_for_lvo_ivt(self, post_stroke_probs):
+        """
+        Wrapper for _calculate_outcomes_dict() for LVO with IVT.
+        """
+        try:
+            # Get relevant distributions
+            not_treated_probs = \
+                self.mrs_distribution_probs['no_treatment_lvo']
+            no_effect_probs = \
+                self.mrs_distribution_probs['no_effect_lvo_ivt_deaths']
+        except KeyError:
+            raise KeyError(
+                'Need to create LVO mRS distributions first.')
+
+        treatment_chosen_bool = self.trial['ivt_chosen_bool'].data == 2
+
+        outcomes_dict = self.calculate_outcomes_dict(
             post_stroke_probs,
             not_treated_probs,
-            no_effect_probs
+            no_effect_probs,
+            treatment_chosen_bool
             )
-        # ... and for only the patients who were treated:
-        results_treated_dict = self._create_mrs_utility_dict(
-            post_stroke_probs[self.trial['mt_chosen_bool'].data == 1, :],
-            not_treated_probs,
-            no_effect_probs
-            )
-        # Merge the two dictionaries:
-        keys_to_merge = [
-            'mean_valid_patients_mean_mrs_shift',
-            'mean_valid_patients_mean_added_utility'
-            ]
-        for key in keys_to_merge:
-            results_dict['treated_population_' + key] = (
-                results_treated_dict[key])
+        return outcomes_dict
 
-        return results_dict
-
-    def calculate_outcomes_for_nlvo_ivt(self):
+    def calculate_outcomes_dict_for_lvo_mt(self, post_stroke_probs):
         """
-        Calculate post-stroke outcomes for nLVO treated with IVT.
+        Wrapper for _calculate_outcomes_dict() for LVO with MT.
+        """
+        try:
+            # Get relevant distributions
+            not_treated_probs = \
+                self.mrs_distribution_probs['no_treatment_lvo']
+            no_effect_probs = \
+                self.mrs_distribution_probs['no_effect_lvo_mt_deaths']
+        except KeyError:
+            raise KeyError(
+                'Need to create LVO mRS distributions first.')
+
+        treatment_chosen_bool = self.trial['mt_chosen_bool'].data == 2
+
+        outcomes_dict = self.calculate_outcomes_dict(
+            post_stroke_probs,
+            not_treated_probs,
+            no_effect_probs,
+            treatment_chosen_bool
+            )
+        return outcomes_dict
+
+    def calculate_outcomes_dict_for_nlvo_ivt(self, post_stroke_probs):
+        """
+        Wrapper for _calculate_outcomes_dict() for nLVO with IVT.
+        """
+        try:
+            # Get relevant distributions
+            not_treated_probs = \
+                self.mrs_distribution_probs['no_treatment_nlvo']
+            no_effect_probs = \
+                self.mrs_distribution_probs['no_effect_nlvo_ivt_deaths']
+        except KeyError:
+            raise KeyError(
+                'Need to create nLVO mRS distributions first.')
+
+        treatment_chosen_bool = self.trial['ivt_chosen_bool'].data == 1
+
+        outcomes_dict = self.calculate_outcomes_dict(
+            post_stroke_probs,
+            not_treated_probs,
+            no_effect_probs,
+            treatment_chosen_bool
+            )
+        return outcomes_dict
+
+    def calculate_outcomes_dict(
+            self,
+            post_stroke_probs,
+            not_treated_probs,
+            no_effect_probs,
+            treatment_chosen_bool
+            ):
+        """
+        Calculate continuous outcomes dictionaries.
+
+        This runs the _create_mrs_utility_dict() function twice,
+        once with all valid patients and once with only the treated
+        valid patients, and then creates one combined dictionary
+        with the important bits.
+
+        Inputs:
+        -------
+        post_stroke_probs     - x by 7 array. One post-stroke mRS
+                                distribution per patient.
+        not_treated_probs     - array of 7 floats. mRS probability
+                                distribution for patients not receiving this
+                                treatment.
+        no_effect_probs       - array of 7 floats. mRS probability
+                                distribution for patients who receive this
+                                treatment after the time of no effect.
+        treatment_chosen_bool - array of x bools. Whether each patient
+                                received this treatment.
 
         Outputs:
         A dictionary containing the following:
@@ -645,46 +729,6 @@ class Continuous_outcome:
         - treated_population_mean_valid_patients_mean_mrs_shift
         - treated_population_mean_valid_patients_mean_added_utility
         """
-
-        try:
-            # Get relevant distributions
-            not_treated_probs = \
-                self.mrs_distribution_probs['no_treatment_nlvo']
-            no_effect_probs = \
-                self.mrs_distribution_probs['no_effect_nlvo_ivt_deaths']
-            no_effect_logodds = \
-                self.mrs_distribution_logodds[
-                    'no_effect_nlvo_ivt_deaths']
-            t0_logodds = \
-                self.mrs_distribution_logodds['t0_treatment_nlvo_ivt']
-        except KeyError:
-            raise KeyError(
-                'Need to create nLVO mRS distributions first.')
-
-        # From inputs, calculate which patients are treated too late
-        # for any effect. Recalculate this on each run in case any
-        # of the patient arrays have changed since the last run.
-        self.trial['ivt_no_effect_bool'].data = (
-            (self.trial['ivt_chosen_bool'].data > 0) &
-            (self.trial['onset_to_needle_mins'].data >=
-             self.ivt_time_no_effect_mins)
-            )
-
-        # Create an x by 7 grid of mRS distributions,
-        # one row of 7 mRS values for each of x patients.
-        mask_valid = (self.trial['stroke_type_code'].data == 1)
-        post_stroke_probs = self._calculate_probs_at_treatment_time(
-            t0_logodds,
-            no_effect_logodds,
-            self.trial['onset_to_needle_mins'].data,
-            self.ivt_time_no_effect_mins,
-            self.trial['ivt_chosen_bool'].data,
-            self.trial['ivt_no_effect_bool'].data,
-            mask_valid,
-            not_treated_probs,
-            no_effect_probs
-            )
-
         # Find mean mRS and utility values in these results dictionary.
         # The results for all patients...
         results_dict = self._create_mrs_utility_dict(
@@ -694,7 +738,7 @@ class Continuous_outcome:
             )
         # ... and for only the patients who were treated:
         results_treated_dict = self._create_mrs_utility_dict(
-            post_stroke_probs[self.trial['ivt_chosen_bool'].data == 1, :],
+            post_stroke_probs[treatment_chosen_bool, :],
             not_treated_probs,
             no_effect_probs
             )
@@ -709,127 +753,19 @@ class Continuous_outcome:
 
         return results_dict
 
-    def _calculate_probs_at_treatment_time(
-            self,
-            t0_logodds,
-            no_effect_logodds,
-            time_to_treatment_mins,
-            time_no_effect_mins,
-            mask_treated,
-            mask_no_effect,
-            mask_valid,
-            not_treated_probs,
-            no_effect_probs
-            ):
-        """
-        Calculates mRS distributions for treatment at a given time.
+    """
+    ##############################
+    ##### CALCULATE OUTCOMES #####
+    ##############################
 
-        The new distributions are created by calculating log-odds at
-        the treatment time. For each mRS band, the method is:
+    The following functions do most of the legwork in actually
+    calculating the outcomes.
 
-        l |                Draw a straight line between the log-odds
-        o |x1    treated   at time zero and the time of no effect.
-        g |  \    at "o"   Then the log-odds at the chosen treatment
-        o |    \           time lies on this line.
-        d |      o
-        d |        \
-        s |__________x2__
-                time
-
-        The (x,y) coordinates of the two points are:
-          x1: (0, t0_logodds)
-          x2: (time_no_effect_mins, no_effect_logodds)
-          o:  (time_to_treatment_mins, treated_logodds)
-
-        The log-odds are then translated to odds and probability:
-          odds = exp(log-odds)
-          prob = odds / (1 + odds)
-
-        This function can accept arrays for multiple patients as input.
-        Each patient is assigned an mRS distribution for one of the
-        following:
-          - treated at input time
-          - treated after time of no effect
-          - not treated
-          - not applicable (all values set to NaN)
-
-        Example:
-        Key:   mRS  ■ 0   ▥ 1   □ 2   ▤ 3   ▦ 4   ▣ 5   ▧ 6
-
-        Example mRS distributions:
-        Pre-stroke:   ■■■■■■■■▥▥▥▥▥▥▥▥▥▥□□□□□□□□▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣
-        No effect:    ■■▥▥▥□□□□□□□▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣▣▣▧▧▧▧▧▧▧▧▧
-        No treatment: ■■■▥▥▥▥□□□□□□□▤▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣▣▧▧▧▧▧▧▧▧
-
-        First five patients' post-stroke mRS distributions:
-        Patient 1:    ■■■■■■■▥▥▥▥▥▥▥▥▥□□□□□□□□▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣▧▧
-        Patient 2:    ■■■▥▥▥□□□□□□□▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣▣▧▧▧▧▧▧▧▧▧
-        Patient 3:    ■■■■▥▥▥▥□□□□□□□▤▤▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣▣▧▧▧▧▧▧
-        Patient 4:    ■■▥▥▥□□□□□□□▤▤▤▤▤▤▤▤▦▦▦▦▦▦▦▦▦▦▣▣▣▣▣▣▣▣▣▣▧▧▧▧▧▧▧▧▧
-        Patient 5:    -------------------------------------------------
-                      (^ Patient 5 is set to invalid)
-        ...
-
-        Inputs:
-        -------
-        t0_logodds             - np.array. Log-odds at time zero. Can
-                                 provide one value per mRS score.
-        no_effect_logodds      - np.array. Log-odds at time of no
-                                 effect. Can provide one value per mRS
-                                 score.
-        time_to_treatment_mins - 1 by x array. Time to treatment in
-                                 minutes for each of x patients.
-        time_no_effect_mins    - float. Time of no effect in minutes.
-        mask_treated           - 1 by x array. True/False whether the
-                                 patient was treated, one value per
-                                 patient.
-        mask_no_effect         - 1 by x array. True/False whether the
-                                 patient was treated after the time of
-                                 no effect, one value per patient.
-        mask_valid             - 1 by x array. True/False whether the
-                                 patient falls into this category,
-                                 e.g. has the right occlusion type.
-        not_treated_probs      - 1 by 7 array. mRS cumulative prob
-                                 distribution if patient is not
-                                 treated.
-        no_effect_probs        - 1 by 7 array. mRS cumulative prob
-                                 distribution if patient is treated
-                                 after the time of no effect.
-
-        Returns:
-        --------
-        treated_probs - x by 7 array. mRS cumulative probability
-                        distribution(s) at the input treatment time(s).
-        """
-
-        # Reshape the arrays to allow for multiple treatment times.
-        time_to_treatment_mins = \
-            time_to_treatment_mins.reshape(len(time_to_treatment_mins), 1)
-        no_effect_logodds = \
-            no_effect_logodds.reshape(1, len(no_effect_logodds))
-        t0_logodds = \
-            t0_logodds.reshape(1, len(t0_logodds))
-
-        treated_probs, treated_odds, treated_logodds = \
-            calculate_mRS_dist_at_treatment_time(
-                time_to_treatment_mins,
-                time_no_effect_mins,
-                t0_logodds,
-                no_effect_logodds
-            )
-
-        # Overwrite these results for patients who do not receive
-        # treatment or who are unaffected due to long treatment time.
-        treated_probs[mask_treated == 0, :] = not_treated_probs
-        treated_probs[mask_no_effect == 1, :] = no_effect_probs
-
-        # Overwrite these results for patients who do not fall into
-        # this category, for example who do not have the occlusion
-        # type in question.
-        treated_probs[mask_valid == 0, :] = np.NaN
-
-        return treated_probs
-
+    If a function is specific to this outcome measurement method,
+    it will appear below. If it is shared between multiple outcome
+    measurement methods, it will probably be in the outcome_utilities
+    module.
+    """
     def _create_mrs_utility_dict(
             self,
             post_stroke_probs,
@@ -876,7 +812,7 @@ class Continuous_outcome:
             post_stroke_probs)                                   # x by 7 grid
         # mean values:
         results['not_treated_mean_mrs'] = np.sum(
-            not_treated_noncum_dist * np.arange(7))                    # 1 float
+            not_treated_noncum_dist * np.arange(7))                  # 1 float
         results['no_effect_mean_mrs'] = np.sum(
             no_effect_noncum_dist * np.arange(7))                    # 1 float
         results['each_patient_post_stroke_mean_mrs'] = np.sum(
@@ -889,7 +825,8 @@ class Continuous_outcome:
 
         # Utility-weighted mRS distributions:
         # mean values:
-        results['not_treated_mean_utility'] = np.sum(not_treated_util)   # 1 float
+        results['not_treated_mean_utility'] = np.sum(
+            not_treated_util)                                        # 1 float
         results['no_effect_mean_utility'] = np.sum(no_effect_util)   # 1 float
         results['each_patient_post_stroke_mean_utility'] = np.sum(
             post_stroke_util, axis=1)                               # x floats
@@ -917,47 +854,9 @@ class Continuous_outcome:
 
         return results
 
-    def _merge_results_dicts(
-            self,
-            results_dicts,
-            labels_for_dicts,
-            final_dict={}
-            ):
-        """
-        Merge multiple dictionaries into one dictionary.
-
-        For example, the same key from three dictionaries:
-          nlvo_ivt_dict['mean_added_utility']
-          lvo_ivt_dict['mean_added_utility']
-          lvo_mt_dict['mean_added_utility']
-        becomes three entries in the combined dictionary:
-          final_dict['nlvo_ivt_mean_added_utility']
-          final_dict['lvo_ivt_mean_added_utility']
-          final_dict['lvo_mt_mean_added_utility']
-
-        Inputs:
-        -------
-        results_dicts    - list of dicts. The dictionaries to be
-                           combined.
-        labels_for_dicts - list of strings. Labels for the
-                           dictionaries for their keys in the combo
-                           dictionary.
-
-        Returns:
-        --------
-        final_dict - dict. The combined dictionary.
-        """
-        for d, result_dict in enumerate(results_dicts):
-            label = labels_for_dicts[d] + '_'
-            for (key, value) in zip(result_dict.keys(), result_dict.values()):
-                new_key = label + key
-                final_dict[new_key] = value
-
-        return final_dict
-
     def _calculate_patient_outcomes(self, dict_results_by_category):
         """
-        Find the outcomes for the patient array from existing results.
+        Find the outcomes for the full cohort from existing results.
 
         Takes the results from the separate results dictionaries and
         pulls out the relevant parts for each patient category
@@ -987,7 +886,7 @@ class Continuous_outcome:
 
         Returns:
         --------
-        patient_array_outcomes - dict. Outcome data for the patient
+        full_cohort_outcomes - dict. Outcome data for the patient
                                  array, containing x entries.
         """
         # Find which indices belong to each category of stroke type
@@ -1101,8 +1000,8 @@ class Continuous_outcome:
         mean_added_utility = \
             np.nanmean(each_patient_mean_added_utility)              # 1 float
 
-        # Create dictionary for combined patient array outcomes:
-        patient_array_outcomes = dict(
+        # Create dictionary for combined full cohort outcomes:
+        full_cohort_outcomes = dict(
             each_patient_post_stroke_mrs_dist=(
                 each_patient_post_stroke_mrs_dist),              # x by 7 grid
             each_patient_post_stroke_mean_mrs=(
@@ -1120,190 +1019,6 @@ class Continuous_outcome:
             )
 
         # Save to instance:
-        self.patient_array_outcomes = patient_array_outcomes
+        self.full_cohort_outcomes = full_cohort_outcomes
 
-        return patient_array_outcomes
-
-    def _make_stats_dict(self, stroke_type_code):
-        """
-        Makes dict of stats for patients in each category.
-
-        Stores number and proportions of patients in the following:
-        - with this stroke type...
-          - ... and treated with IVT
-          - ... and treated with MT
-          - ... and treated with IVT but no effect
-          - ... and treated with MT but no effect
-          - ... and not treated.
-
-        Inputs:
-        -------
-        stroke_type_code - int. 0 for other, 1 for nLVO, 2 for LVO.
-                           Matches the code in stroke_type_code
-                           patient array.
-        """
-        # Number of patients
-        n_total = self.number_of_patients
-        n_stroke_type = len((
-            self.trial['stroke_type_code'].data ==
-            stroke_type_code).nonzero()[0])
-
-        # Number treated with IVT
-        n_IVT = len((
-            (self.trial['stroke_type_code'].data == stroke_type_code) &
-            (self.trial['ivt_chosen_bool'].data > 0)
-            ).nonzero()[0])
-        # Number treated with MT
-        n_MT = len((
-            (self.trial['stroke_type_code'].data == stroke_type_code) &
-            (self.trial['mt_chosen_bool'].data > 0)
-            ).nonzero()[0])
-        # Number treated with IVT after no-effect time
-        n_IVT_no_effect = len((
-            (self.trial['stroke_type_code'].data == stroke_type_code) &
-            (self.trial['ivt_chosen_bool'].data > 0) &
-            (self.trial['ivt_no_effect_bool'].data == 1)
-            ).nonzero()[0])
-        # Number treated with MT after no-effect time
-        n_MT_no_effect = len((
-            (self.trial['stroke_type_code'].data == stroke_type_code) &
-            (self.trial['mt_chosen_bool'].data > 0) &
-            (self.trial['mt_no_effect_bool'].data == 1)
-            ).nonzero()[0])
-        # Number not treated
-        n_no_treatment = len((
-            (self.trial['stroke_type_code'].data == stroke_type_code) &
-            (self.trial['mt_chosen_bool'].data < 1) &
-            (self.trial['ivt_chosen_bool'].data < 1)
-            ).nonzero()[0])
-
-        # Calculate proportions from the input numbers:
-        if n_stroke_type != 0:
-            prop_IVT_of_stroke_type = n_IVT / n_stroke_type
-            prop_MT_of_stroke_type = n_MT / n_stroke_type
-            prop_IVT_no_effect_of_stroke_type = (
-                n_IVT_no_effect / n_stroke_type)
-            prop_MT_no_effect_of_stroke_type = (
-                n_MT_no_effect / n_stroke_type)
-            prop_no_treatment_of_stroke_type = (
-                n_no_treatment / n_stroke_type)
-        else:
-            prop_IVT_of_stroke_type = np.NaN
-            prop_MT_of_stroke_type = np.NaN
-            prop_IVT_no_effect_of_stroke_type = np.NaN
-            prop_MT_no_effect_of_stroke_type = np.NaN
-            prop_no_treatment_of_stroke_type = np.NaN
-
-        if n_total != 0:
-            prop_stroke_type = n_stroke_type / n_total
-            prop_IVT_of_total = n_IVT / n_total
-            prop_MT_of_total = n_MT / n_total
-            prop_IVT_no_effect_of_total = n_IVT_no_effect / n_total
-            prop_MT_no_effect_of_total = n_MT_no_effect / n_total
-            prop_no_treatment_of_total = n_no_treatment / n_total
-        else:
-            prop_stroke_type = np.NaN
-            prop_IVT_of_total = np.NaN
-            prop_MT_of_total = np.NaN
-            prop_IVT_no_effect_of_total = np.NaN
-            prop_MT_no_effect_of_total = np.NaN
-            prop_no_treatment_of_total = np.NaN
-
-        # Add all of this to the dictionary:
-        stats_dict = dict()
-        # Numbers:
-        stats_dict['n_stroke_type'] = n_stroke_type
-        stats_dict['n_total'] = n_total
-        stats_dict['n_IVT'] = n_IVT
-        stats_dict['n_MT'] = n_MT
-        stats_dict['n_IVT_no_effect'] = n_IVT_no_effect
-        stats_dict['n_MT_no_effect'] = n_MT_no_effect
-        stats_dict['n_no_treatment'] = n_no_treatment
-        # Proportions:
-        stats_dict['prop_stroke_type'] = prop_stroke_type
-        stats_dict['prop_IVT_of_stroke_type'] = prop_IVT_of_stroke_type
-        stats_dict['prop_IVT_of_total'] = prop_IVT_of_total
-        stats_dict['prop_MT_of_stroke_type'] = prop_MT_of_stroke_type
-        stats_dict['prop_MT_of_total'] = prop_MT_of_total
-        stats_dict['prop_IVT_no_effect_of_stroke_type'] = \
-            prop_IVT_no_effect_of_stroke_type
-        stats_dict['prop_IVT_no_effect_of_total'] = \
-            prop_IVT_no_effect_of_total
-        stats_dict['prop_MT_no_effect_of_stroke_type'] = \
-            prop_MT_no_effect_of_stroke_type
-        stats_dict['prop_MT_no_effect_of_total'] = \
-            prop_MT_no_effect_of_total
-        stats_dict['prop_no_treatment_of_stroke_type'] = \
-            prop_no_treatment_of_stroke_type
-        stats_dict['prop_no_treatment_of_total'] = \
-            prop_no_treatment_of_total
-
-        return stats_dict
-
-    def print_patient_population_stats(self):
-        """
-        Find numbers of patients in each category, print stats.
-
-        Prints numbers and proportions of patients in the following:
-        - with each stroke type...
-          - ... and treated with IVT
-          - ... and treated with MT
-          - ... and treated with IVT but no effect
-          - ... and treated with MT but no effect
-          - ... and not treated.
-        """
-        # Function to create dictionaries of patient statistics
-        # for nLVO and LVO patients (nLVO_dict and LVO_dict).
-        # (re-calculate this now even if it already exists,
-        # in case patient array has been updated since it was made).
-        self.nLVO_dict = self._make_stats_dict(stroke_type_code=1)
-        self.LVO_dict = self._make_stats_dict(stroke_type_code=2)
-        self.other_stroke_types_dict = (
-            self._make_stats_dict(stroke_type_code=0))
-
-        stroke_type_strs = ['nLVO', 'LVO', 'Other stroke types']
-        stats_dicts = [self.nLVO_dict, self.LVO_dict,
-                       self.other_stroke_types_dict]
-        for i, stroke_type_str in enumerate(stroke_type_strs):
-            stats_dict = stats_dicts[i]
-
-            # The printed string:
-            print(f'----- {stroke_type_str} -----')
-            print(''.join([
-                'Number of patients:      ',
-                f'{stats_dict["n_stroke_type"]:7d} ',
-                f'({100*stats_dict["prop_stroke_type"]:4.1f}% of total)',
-                '\n',
-                'Treated with IVT:        ',
-                f'{stats_dict["n_IVT"]:7d} ',
-                f'({100*stats_dict["prop_IVT_of_stroke_type"]:4.1f}% ',
-                f'of {stroke_type_str}, ',
-                f'{100*stats_dict["prop_IVT_of_total"]:4.1f}% of total)',
-                '\n',
-                'Treated with MT:         ',
-                f'{stats_dict["n_MT"]:7d} ',
-                f'({100*stats_dict["prop_MT_of_stroke_type"]:4.1f}% ',
-                f'of {stroke_type_str}, ',
-                f'{100*stats_dict["prop_MT_of_total"]:4.1f}% of total)',
-                '\n',
-                'No effect from IVT:      ',
-                f'{stats_dict["n_IVT_no_effect"]:7d} ',
-                f'({100*stats_dict["prop_IVT_no_effect_of_stroke_type"]:4.1f}% ',
-                f'of {stroke_type_str}, ',
-                f'{100*stats_dict["prop_IVT_no_effect_of_total"]:4.1f}% ',
-                'of total)',
-                '\n',
-                'No effect from MT:       ',
-                f'{stats_dict["n_MT_no_effect"]:7d} ',
-                f'({100*stats_dict["prop_MT_no_effect_of_stroke_type"]:4.1f}% ',
-                f'of {stroke_type_str}, ',
-                f'{100*stats_dict["prop_MT_no_effect_of_total"]:4.1f}% ',
-                'of total)',
-                '\n',
-                'No treatment:            ',
-                f'{stats_dict["n_no_treatment"]:7d} ',
-                f'({100*stats_dict["prop_no_treatment_of_stroke_type"]:4.1f}% ',
-                f'of {stroke_type_str}, ',
-                f'{100*stats_dict["prop_no_treatment_of_total"]:4.1f}% ',
-                'of total)',
-                ]))
+        return full_cohort_outcomes
