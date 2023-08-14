@@ -10,7 +10,7 @@ Toolkit for calculating patient outcomes after stroke depending on time to treat
 + __PyPI package:__ https://pypi.org/project/stroke-outcome/
 + __Parent project:__ https://github.com/stroke-modelling
 
-## Get started
+## ➡️ Get started
 
 This toolkit works with Python versions 3.8 and up.
 
@@ -20,7 +20,7 @@ Install the package with:
 
 And follow the links to the code demonstrations in the "External resources" section below.
 
-## Motivation in brief:
+## 🏥 Motivation in brief:
 
 Disability levels may be measured in various ways. In this project we are using the modified Rankin Scale (mRS). It is a commonly used scale for measuring the degree of disability or dependence in the daily activities of people who have suffered a stroke. The scale runs from 0-6, running from perfect health without symptoms to death.
 
@@ -41,7 +41,7 @@ The method is built by synthesising data from multiple sources to define the dis
 
 For more details, please see [the online book][jupyterbooks-link].
 
-## :package: Package details:
+## 📦 Package details:
 The package includes the following data:
 + mRS cumulative probability distributions as derived in [the online book][jupyterbooks-link].
 + A selection of utility scores for each mRS level.
@@ -52,7 +52,7 @@ The package includes the following processes:
 + __Continuous outcomes:__ Each "patient" uses the population mRS probability distribution rather than being assigned a single mRS score.
 
 
-## :books: External resources
+## 📚 External resources
 
 The following resources are not included within the package files and are accessible on the GitHub repository.
 
@@ -61,8 +61,8 @@ Each major aspect of the package has a __demonstration__ and a __documentation__
 A conda environment file, `environment.yml`, is provided in the [GitHub repository][github-link] for use with the demonstration Jupyter notebooks.
 
 __Continuous outcomes:__
-  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demonstration][jupyternotebook-continuous-link] 
-  + [![Jupyter Notebook][jupyternotebook-img]][documentation-continuous-link] [Documentation][documentation-continuous-link]
+  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demo][jupyternotebook-continuous-link] 
+  + [![Jupyter Notebook][jupyternotebook-img]][documentation-continuous-link] [Docs][documentation-continuous-link]
 
 
 

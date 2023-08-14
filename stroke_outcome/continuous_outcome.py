@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from .evaluated_array import Evaluated_array
+from .outcome_utilities import calculate_mRS_dist_at_treatment_time
 
 
 class Continuous_outcome:
@@ -771,8 +772,11 @@ class Continuous_outcome:
 
         Inputs:
         -------
-        t0_logodds             - float. Log-odds at time zero.
-        no_effect_logodds      - float. Log-odds at time of no effect.
+        t0_logodds             - np.array. Log-odds at time zero. Can
+                                 provide one value per mRS score.
+        no_effect_logodds      - np.array. Log-odds at time of no
+                                 effect. Can provide one value per mRS
+                                 score.
         time_to_treatment_mins - 1 by x array. Time to treatment in
                                  minutes for each of x patients.
         time_no_effect_mins    - float. Time of no effect in minutes.
@@ -785,7 +789,7 @@ class Continuous_outcome:
         mask_valid             - 1 by x array. True/False whether the
                                  patient falls into this category,
                                  e.g. has the right occlusion type.
-        not_treated_probs        - 1 by 7 array. mRS cumulative prob
+        not_treated_probs      - 1 by 7 array. mRS cumulative prob
                                  distribution if patient is not
                                  treated.
         no_effect_probs        - 1 by 7 array. mRS cumulative prob
@@ -806,20 +810,13 @@ class Continuous_outcome:
         t0_logodds = \
             t0_logodds.reshape(1, len(t0_logodds))
 
-        # Calculate fraction of time to no effect passed
-        frac_to_no_effect = time_to_treatment_mins / time_no_effect_mins
-
-        # Combine t=0 and no effect distributions based on time passed
-        treated_logodds = ((frac_to_no_effect * no_effect_logodds) +
-                           ((1 - frac_to_no_effect) * t0_logodds))
-
-        # Convert to odds and probabilties
-        treated_odds = np.exp(treated_logodds)
-        treated_probs = treated_odds / (1 + treated_odds)
-
-        # Manually set all of the probabilities for mRS<=6 to be 1
-        # as the logodds calculation returns NaN.
-        treated_probs[:, -1] = 1.0
+        treated_probs, treated_odds, treated_logodds = \
+            calculate_mRS_dist_at_treatment_time(
+                time_to_treatment_mins,
+                time_no_effect_mins,
+                t0_logodds,
+                no_effect_logodds
+            )
 
         # Overwrite these results for patients who do not receive
         # treatment or who are unaffected due to long treatment time.
