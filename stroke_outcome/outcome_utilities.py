@@ -84,6 +84,57 @@ def sanity_check_input_mrs_dists(mrs_dists):
         # Just print warning, don't stop the code.
 
 
+def sanity_check_utility_weights(utility_weights):
+    if np.size(utility_weights) == 7:
+        # Use ravel() to ensure array shape of (7, ).
+        utility_weights = utility_weights.ravel()
+    else:
+        utility_weights = np.array(
+            [0.97, 0.88, 0.74, 0.55, 0.20, -0.19, 0.00])
+        print(''.join([
+            'Problem with the input utility weights. ',
+            'Expected one weight per mRS score from 0 to 6. ',
+            'Setting self.utility_weights to default values: ',
+            f'{utility_weights}'
+            ]))
+    return utility_weights
+
+
+def sanity_check_trial_input_lengths(trial, number_of_patients):
+    # Do an extra check that the number of patients is matched
+    # by all arrays in case the value was updated after
+    # initialisation.
+    patient_array_labels = [
+        'stroke type (code)',
+        'time to IVT (mins)',
+        'received IVT (bool)',
+        'time to MT (mins)',
+        'received MT (bool)',
+        'IVT no effect (bool)',
+        'MT no effect (bool)'
+    ]
+    patient_array_vars = [
+        trial['stroke_type_code'].data,
+        trial['onset_to_needle_mins'].data,
+        trial['ivt_chosen_bool'].data,
+        trial['onset_to_puncture_mins'].data,
+        trial['mt_chosen_bool'].data,
+        trial['ivt_no_effect_bool'].data,
+        trial['mt_no_effect_bool'].data
+        ]
+    length_warning_str = ''.join([
+        'The following patient data arrays contain a different number ',
+        'of patients than the instance value of ',
+        f'{number_of_patients}:',
+        '\n'
+        ])
+    for (val, key) in zip(patient_array_vars, patient_array_labels):
+        if len(val) != number_of_patients:
+            print(length_warning_str + '- ' + key +
+                  f', length {len(val)}')
+            length_warning_str = ''
+
+
 def extract_mrs_probs_and_logodds(mrs_dists):
     # Store modified Rankin Scale distributions as arrays in dictionary
     mrs_distribution_probs = dict()
@@ -98,6 +149,184 @@ def extract_mrs_probs_and_logodds(mrs_dists):
         o = p / (1 - p)
         mrs_distribution_logodds[index] = np.log(o)
     return mrs_distribution_probs, mrs_distribution_logodds
+
+
+def assign_nLVO_with_MT_as_LVO(
+        stroke_type_code,
+        mt_chosen_bool
+        ):
+    number_of_patients_with_nLVO_and_MT = len((
+        (stroke_type_code == 1) &
+        (mt_chosen_bool > 0)
+        ).nonzero()[0])
+    if number_of_patients_with_nLVO_and_MT > 0:
+        # Change the stroke type to LVO.
+        # Assume that the initial diagnosis was incorrect.
+        inds_nLVO_and_MT = np.where((
+            (stroke_type_code == 1) &
+            (mt_chosen_bool > 0)
+            ))[0]
+        new_stroke_types = stroke_type_code
+        new_stroke_types[inds_nLVO_and_MT] = 2
+        stroke_type_code = new_stroke_types
+    return stroke_type_code
+
+
+def assign_treatment_no_effect(
+        treatment_chosen_bool,
+        onset_to_treatment_mins,
+        time_no_effect_mins
+        ):
+    """
+    Assign which patients receive treatment after the no effect time.
+    """
+    # From inputs, calculate which patients are treated too late
+    # for any effect. Recalculate this on each run in case any
+    # of the patient data arrays have changed since the last run.
+    no_effect_bool = (
+        (treatment_chosen_bool > 0) &
+        (onset_to_treatment_mins >= time_no_effect_mins)
+        )
+    return no_effect_bool
+
+
+"""
+####################
+##### WRAPPERS #####
+####################
+
+This block of functions contains wrappers. The functions here
+gather variables and pass them to other functions to do the
+actual calculations.
+
+The wrappers are for:
++ _calculate_probs_at_treatment_time()
+"""
+
+
+def calculate_post_stroke_mrs_dists_for_lvo_ivt(
+        mrs_distribution_probs,
+        mrs_distribution_logodds,
+        trial,
+        ivt_time_no_effect_mins
+        ):
+    """
+    Wrapper for _calculate_probs_at_treatment_time() for LVO+IVT.
+
+    Calculate post-stroke mRS dists for LVO treated with IVT.
+    """
+    try:
+        # Get relevant distributions
+        not_treated_probs = \
+            mrs_distribution_probs['no_treatment_lvo']
+        no_effect_probs = \
+            mrs_distribution_probs['no_effect_lvo_ivt_deaths']
+        no_effect_logodds = \
+            mrs_distribution_logodds['no_effect_lvo_ivt_deaths']
+        t0_logodds = \
+            mrs_distribution_logodds['t0_treatment_lvo_ivt']
+    except KeyError:
+        raise KeyError(
+            'Need to create LVO mRS distributions first.')
+
+    # Create an x by 7 grid of mRS distributions,
+    # one row of 7 mRS values for each of x patients.
+    mask_valid = (trial['stroke_type_code'].data == 2)
+    post_stroke_probs = _calculate_probs_at_treatment_time(
+        t0_logodds,
+        no_effect_logodds,
+        trial['onset_to_needle_mins'].data,
+        ivt_time_no_effect_mins,
+        trial['ivt_chosen_bool'].data,
+        trial['ivt_no_effect_bool'].data,
+        mask_valid,
+        not_treated_probs,
+        no_effect_probs
+        )
+    return post_stroke_probs
+
+
+def calculate_post_stroke_mrs_dists_for_lvo_mt(
+        mrs_distribution_probs,
+        mrs_distribution_logodds,
+        trial,
+        mt_time_no_effect_mins
+        ):
+    """
+    Wrapper for _calculate_probs_at_treatment_time() for LVO+MT.
+
+    Calculate post-stroke mRS dists for LVO treated with MT.
+    """
+    try:
+        # Get relevant distributions
+        not_treated_probs = mrs_distribution_probs['no_treatment_lvo']
+        no_effect_probs = \
+            mrs_distribution_probs['no_effect_lvo_mt_deaths']
+        no_effect_logodds = mrs_distribution_logodds[
+                'no_effect_lvo_mt_deaths']
+        t0_logodds = mrs_distribution_logodds['t0_treatment_lvo_mt']
+    except KeyError:
+        raise KeyError(
+            'Need to create LVO mRS distributions first.')
+
+    # Create an x by 7 grid of mRS distributions,
+    # one row of 7 mRS values for each of x patients.
+    mask_valid = (trial['stroke_type_code'].data == 2)
+    post_stroke_probs = _calculate_probs_at_treatment_time(
+        t0_logodds,
+        no_effect_logodds,
+        trial['onset_to_puncture_mins'].data,
+        mt_time_no_effect_mins,
+        trial['mt_chosen_bool'].data,
+        trial['mt_no_effect_bool'].data,
+        mask_valid,
+        not_treated_probs,
+        no_effect_probs
+        )
+    return post_stroke_probs
+
+
+def calculate_post_stroke_mrs_dists_for_nlvo_ivt(
+        mrs_distribution_probs,
+        mrs_distribution_logodds,
+        trial,
+        ivt_time_no_effect_mins
+        ):
+    """
+    Wrapper for _calculate_probs_at_treatment_time() for nLVO+IVT.
+
+    Calculate post-stroke mRS dists for nLVO treated with IVT.
+    """
+    try:
+        # Get relevant distributions
+        not_treated_probs = \
+            mrs_distribution_probs['no_treatment_nlvo']
+        no_effect_probs = \
+            mrs_distribution_probs['no_effect_nlvo_ivt_deaths']
+        no_effect_logodds = \
+            mrs_distribution_logodds[
+                'no_effect_nlvo_ivt_deaths']
+        t0_logodds = \
+            mrs_distribution_logodds['t0_treatment_nlvo_ivt']
+    except KeyError:
+        raise KeyError(
+            'Need to create nLVO mRS distributions first.')
+
+    # Create an x by 7 grid of mRS distributions,
+    # one row of 7 mRS values for each of x patients.
+    mask_valid = (trial['stroke_type_code'].data == 1)
+    post_stroke_probs = _calculate_probs_at_treatment_time(
+        t0_logodds,
+        no_effect_logodds,
+        trial['onset_to_needle_mins'].data,
+        ivt_time_no_effect_mins,
+        trial['ivt_chosen_bool'].data,
+        trial['ivt_no_effect_bool'].data,
+        mask_valid,
+        not_treated_probs,
+        no_effect_probs
+        )
+    return post_stroke_probs
 
 
 def _calculate_probs_at_treatment_time(
@@ -322,13 +551,12 @@ def calculate_patient_population_stats(trial):
         trial, stroke_type_code=0)
 
     # Rearrange the same data into dataframes for easier reading.
-    nLVO_df = _make_stats_df(nLVO_dict, 'nLVO')
-    LVO_df = _make_stats_df(LVO_dict, 'LVO')
-    other_stroke_types_df = _make_stats_df(
-        other_stroke_types_dict, 'Other stroke types')
+    stats_df = _make_stats_df(
+        [nLVO_dict, LVO_dict, other_stroke_types_dict],
+        labels=['nLVO', 'LVO', 'Other']
+        )
 
-    return (nLVO_dict, LVO_dict, other_stroke_types_dict,
-            nLVO_df, LVO_df, other_stroke_types_df)
+    return stats_df
 
 
 def _make_stats_dict(trial, stroke_type_code):
@@ -454,7 +682,7 @@ def _make_stats_dict(trial, stroke_type_code):
     return stats_dict
 
 
-def _make_stats_df(stats_dict, stroke_type_str=''):
+def _make_stats_df(stats_dicts, labels=['nLVO', 'LVO', 'Other']):
     """
     Rearrange the stats dictionary into a pandas DataFrame.
 
@@ -470,52 +698,59 @@ def _make_stats_df(stats_dict, stroke_type_str=''):
          treatment category and proportion type.
     """
     # Use this column and row names:
-    cols_for_df = [
-        'Counts',
-        f'Proportion of {stroke_type_str}',
+    cols_each_stroke_type = [
+        'Count',
+        'Proportion of this stroke type',
         'Proportion of full cohort'
         ]
+    cols_for_df = []
     index_for_df = [
-        f'{stroke_type_str}',
+        'Total',
         'IVT',
         'MT',
         'IVT no effect',
         'MT no effect',
         'No treatment'
     ]
+    data_for_df = []
 
-    # Take data from the input stats dictionary.
-    # Raw count of each category:
-    counts = [
-        stats_dict["n_stroke_type"],
-        stats_dict["n_IVT"],
-        stats_dict["n_MT"],
-        stats_dict["n_IVT_no_effect"],
-        stats_dict["n_MT_no_effect"],
-        stats_dict["n_no_treatment"],
-    ]
-    # Proportion of this category out of this stroke type:
-    props_of_this_stroke_type = [
-        1.0,  # prop of this stroke type that have this stroke type
-        stats_dict["prop_IVT_of_stroke_type"],
-        stats_dict["prop_MT_of_stroke_type"],
-        stats_dict["prop_IVT_no_effect_of_stroke_type"],
-        stats_dict["prop_MT_no_effect_of_stroke_type"],
-        stats_dict["prop_no_treatment_of_stroke_type"]
-    ]
-    # Proportion of this category out of the full cohort:
-    props_of_full_cohort = [
-        stats_dict["prop_stroke_type"],
-        stats_dict["prop_IVT_of_total"],
-        stats_dict["prop_MT_of_total"],
-        stats_dict["prop_IVT_no_effect_of_total"],
-        stats_dict["prop_MT_no_effect_of_total"],
-        stats_dict["prop_no_treatment_of_total"]
-    ]
+    for s, stats_dict in enumerate(stats_dicts):
+        # Take data from the input stats dictionary.
+        # Raw count of each category:
+        counts = [
+            stats_dict["n_stroke_type"],
+            stats_dict["n_IVT"],
+            stats_dict["n_MT"],
+            stats_dict["n_IVT_no_effect"],
+            stats_dict["n_MT_no_effect"],
+            stats_dict["n_no_treatment"],
+        ]
+        # Proportion of this category out of this stroke type:
+        props_of_this_stroke_type = [
+            1.0,  # prop of this stroke type that have this stroke type
+            stats_dict["prop_IVT_of_stroke_type"],
+            stats_dict["prop_MT_of_stroke_type"],
+            stats_dict["prop_IVT_no_effect_of_stroke_type"],
+            stats_dict["prop_MT_no_effect_of_stroke_type"],
+            stats_dict["prop_no_treatment_of_stroke_type"]
+        ]
+        # Proportion of this category out of the full cohort:
+        props_of_full_cohort = [
+            stats_dict["prop_stroke_type"],
+            stats_dict["prop_IVT_of_total"],
+            stats_dict["prop_MT_of_total"],
+            stats_dict["prop_IVT_no_effect_of_total"],
+            stats_dict["prop_MT_no_effect_of_total"],
+            stats_dict["prop_no_treatment_of_total"]
+        ]
+
+        label = labels[s]
+        cols_for_df += [label + c for c in cols_each_stroke_type]
+        data_for_df += [
+            counts, props_of_this_stroke_type, props_of_full_cohort]
 
     # Place this data into one 2D array:
-    data_for_df = np.vstack((
-        counts, props_of_this_stroke_type, props_of_full_cohort))
+    data_for_df = np.vstack(data_for_df)
 
     # Convert to dataframe:
     df = pd.DataFrame(
