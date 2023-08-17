@@ -4,7 +4,7 @@ Utilities for the stroke outcome package.
 Contents:
 + import_mrs_dists_from_file
 + import_utility_dists_from_file
-+ calculate_mRS_dist_at_treatment_time
++ calculate_mrs_dist_at_treatment_time
 """
 import pandas as pd
 import numpy as np
@@ -69,12 +69,12 @@ def sanity_check_input_mrs_dists(mrs_dists):
     # ##### Checks for mRS dists #####
     # Check that everything in the mRS dist arrays is a number.
     # Check that the dtype of each column of data is int or float.
-    check_all_mRS_values_are_numbers_bool = np.all(
+    check_all_mrs_values_are_numbers_bool = np.all(
         [((np.dtype(mrs_dists[d]) == np.dtype('float')) |
             (np.dtype(mrs_dists[d]) == np.dtype('int')))
             for d in mrs_dists.columns]
     )
-    if check_all_mRS_values_are_numbers_bool is False:
+    if check_all_mrs_values_are_numbers_bool is False:
         exc_string = '''Some of the input mRS values are not numbers'''
         raise TypeException(exc_string) from None
 
@@ -82,6 +82,68 @@ def sanity_check_input_mrs_dists(mrs_dists):
     if mrs_dists.index.dtype not in ['O']:
         print('The input mRS distributions might be improperly labelled.')
         # Just print warning, don't stop the code.
+
+
+def sanity_check_mrs_dists_for_stroke_type(
+        mrs_distribution_probs,
+        stroke_type_codes,
+        ivt_chosen_bool,
+        mt_chosen_bool
+        ):
+    """
+        # Sanity check the mRS distributions based on the stroke types:
+        # if a stroke type exists in the stroke_type_code data,
+        # check that the matching mRS distributions have been given.
+        # Also check by treatment type.
+    """
+    nlvo_ivt_keys = [
+        'pre_stroke_nlvo',
+        'pre_stroke_nlvo_ivt_deaths',
+        'no_treatment_nlvo',
+        'no_effect_nlvo_ivt_deaths',
+        't0_treatment_nlvo_ivt'
+    ]
+    lvo_mt_keys = [
+        'pre_stroke_lvo',
+        'pre_stroke_lvo_mt_deaths',
+        'no_treatment_lvo',
+        'no_effect_lvo_mt_deaths',
+        't0_treatment_lvo_mt'
+    ]
+    lvo_ivt_keys = [
+        'pre_stroke_lvo',
+        'pre_stroke_lvo_ivt_deaths',
+        'no_treatment_lvo',
+        'no_effect_lvo_ivt_deaths',
+        't0_treatment_lvo_ivt'
+    ]
+    keys_to_check = []
+    if np.any((stroke_type_codes == 1) & (ivt_chosen_bool == 1)):
+        # Check for nLVO data.
+        keys_to_check += nlvo_ivt_keys
+    if np.any((stroke_type_codes == 2) & (ivt_chosen_bool == 1)):
+        # Check for LVO + IVT data.
+        keys_to_check += lvo_ivt_keys
+    if np.any((stroke_type_codes == 2) & (mt_chosen_bool == 1)):
+        # Check for LVO + MT data.
+        keys_to_check += lvo_mt_keys
+    if np.any(stroke_type_codes == 0):
+        # Currently we have no mRS distributions for
+        # "other" stroke types.
+        pass
+
+    error_str = ''
+    for key in keys_to_check:
+        try:
+            mrs_distribution_probs[key]
+        except KeyError:
+            error_str += f', {key}'
+    if len(error_str) > 0:
+        error_str = error_str[1:]  # Remove leading comma
+        error_str = (
+            'Expected the following mRS probability distributions:' +
+            error_str)
+        raise KeyError(error_str) from None
 
 
 def sanity_check_utility_weights(utility_weights):
@@ -151,25 +213,29 @@ def extract_mrs_probs_and_logodds(mrs_dists):
     return mrs_distribution_probs, mrs_distribution_logodds
 
 
-def assign_nLVO_with_MT_as_LVO(
+def assign_nlvo_with_mt_as_lvo(
         stroke_type_code,
         mt_chosen_bool
         ):
-    number_of_patients_with_nLVO_and_MT = len((
+    """
+    comment me please
+    """
+    number_of_patients_with_nlvo_and_mt = len((
         (stroke_type_code == 1) &
         (mt_chosen_bool > 0)
         ).nonzero()[0])
-    if number_of_patients_with_nLVO_and_MT > 0:
+    if number_of_patients_with_nlvo_and_mt == 0:
+        return stroke_type_code
+    else:
         # Change the stroke type to LVO.
         # Assume that the initial diagnosis was incorrect.
-        inds_nLVO_and_MT = np.where((
+        inds_nlvo_and_mt = np.where((
             (stroke_type_code == 1) &
             (mt_chosen_bool > 0)
             ))[0]
         new_stroke_types = stroke_type_code
-        new_stroke_types[inds_nLVO_and_MT] = 2
-        stroke_type_code = new_stroke_types
-    return stroke_type_code
+        new_stroke_types[inds_nlvo_and_mt] = 2
+        return new_stroke_types
 
 
 def assign_treatment_no_effect(
@@ -430,7 +496,7 @@ def _calculate_probs_at_treatment_time(
         t0_logodds.reshape(1, len(t0_logodds))
 
     treated_probs, treated_odds, treated_logodds = \
-        calculate_mRS_dist_at_treatment_time(
+        calculate_mrs_dist_at_treatment_time(
             time_to_treatment_mins,
             time_no_effect_mins,
             t0_logodds,
@@ -450,12 +516,12 @@ def _calculate_probs_at_treatment_time(
     return treated_probs
 
 
-def calculate_mRS_dist_at_treatment_time(
+def calculate_mrs_dist_at_treatment_time(
         time_to_treatment_mins,
         time_no_effect_mins,
         t0_logodds,
         no_effect_logodds,
-        final_value_is_mRS6=True
+        final_value_is_mrs6=True
         ):
     """
     Calculate the mRS distribution at arbitrary treatment time(s).
@@ -496,7 +562,7 @@ def calculate_mRS_dist_at_treatment_time(
     no_effect_logodds      - np.array. Log-odds at time of no
                              effect. Can provide one value per mRS
                              score.
-    final_value_is_mRS6    - bool. Whether the final logodds value
+    final_value_is_mrs6    - bool. Whether the final logodds value
                              is for mRS<=6. If True, the final
                              probabilities are all set to 1 to replace
                              the default Not A Number values.
@@ -519,7 +585,7 @@ def calculate_mRS_dist_at_treatment_time(
     treated_odds = np.exp(treated_logodds)
     treated_probs = treated_odds / (1 + treated_odds)
 
-    if final_value_is_mRS6 is True:
+    if final_value_is_mrs6 is True:
         # Manually set all of the probabilities for mRS<=6 to be 1
         # as the logodds calculation returns NaN.
         treated_probs[:, -1] = 1.0
@@ -590,23 +656,23 @@ def _make_stats_dict(trial, stroke_type_code):
         stroke_type_code).nonzero()[0])
 
     # Number treated with IVT
-    n_IVT = len((
+    n_ivt = len((
         (trial['stroke_type_code'].data == stroke_type_code) &
         (trial['ivt_chosen_bool'].data > 0)
         ).nonzero()[0])
     # Number treated with MT
-    n_MT = len((
+    n_mt = len((
         (trial['stroke_type_code'].data == stroke_type_code) &
         (trial['mt_chosen_bool'].data > 0)
         ).nonzero()[0])
     # Number treated with IVT after no-effect time
-    n_IVT_no_effect = len((
+    n_ivt_no_effect = len((
         (trial['stroke_type_code'].data == stroke_type_code) &
         (trial['ivt_chosen_bool'].data > 0) &
         (trial['ivt_no_effect_bool'].data == 1)
         ).nonzero()[0])
     # Number treated with MT after no-effect time
-    n_MT_no_effect = len((
+    n_mt_no_effect = len((
         (trial['stroke_type_code'].data == stroke_type_code) &
         (trial['mt_chosen_bool'].data > 0) &
         (trial['mt_no_effect_bool'].data == 1)
@@ -620,34 +686,34 @@ def _make_stats_dict(trial, stroke_type_code):
 
     # Calculate proportions from the input numbers:
     if n_stroke_type != 0:
-        prop_IVT_of_stroke_type = n_IVT / n_stroke_type
-        prop_MT_of_stroke_type = n_MT / n_stroke_type
-        prop_IVT_no_effect_of_stroke_type = (
-            n_IVT_no_effect / n_stroke_type)
-        prop_MT_no_effect_of_stroke_type = (
-            n_MT_no_effect / n_stroke_type)
+        prop_ivt_of_stroke_type = n_ivt / n_stroke_type
+        prop_mt_of_stroke_type = n_mt / n_stroke_type
+        prop_ivt_no_effect_of_stroke_type = (
+            n_ivt_no_effect / n_stroke_type)
+        prop_mt_no_effect_of_stroke_type = (
+            n_mt_no_effect / n_stroke_type)
         prop_no_treatment_of_stroke_type = (
             n_no_treatment / n_stroke_type)
     else:
-        prop_IVT_of_stroke_type = np.NaN
-        prop_MT_of_stroke_type = np.NaN
-        prop_IVT_no_effect_of_stroke_type = np.NaN
-        prop_MT_no_effect_of_stroke_type = np.NaN
+        prop_ivt_of_stroke_type = np.NaN
+        prop_mt_of_stroke_type = np.NaN
+        prop_ivt_no_effect_of_stroke_type = np.NaN
+        prop_mt_no_effect_of_stroke_type = np.NaN
         prop_no_treatment_of_stroke_type = np.NaN
 
     if n_total != 0:
         prop_stroke_type = n_stroke_type / n_total
-        prop_IVT_of_total = n_IVT / n_total
-        prop_MT_of_total = n_MT / n_total
-        prop_IVT_no_effect_of_total = n_IVT_no_effect / n_total
-        prop_MT_no_effect_of_total = n_MT_no_effect / n_total
+        prop_ivt_of_total = n_ivt / n_total
+        prop_mt_of_total = n_mt / n_total
+        prop_ivt_no_effect_of_total = n_ivt_no_effect / n_total
+        prop_mt_no_effect_of_total = n_mt_no_effect / n_total
         prop_no_treatment_of_total = n_no_treatment / n_total
     else:
         prop_stroke_type = np.NaN
-        prop_IVT_of_total = np.NaN
-        prop_MT_of_total = np.NaN
-        prop_IVT_no_effect_of_total = np.NaN
-        prop_MT_no_effect_of_total = np.NaN
+        prop_ivt_of_total = np.NaN
+        prop_mt_of_total = np.NaN
+        prop_ivt_no_effect_of_total = np.NaN
+        prop_mt_no_effect_of_total = np.NaN
         prop_no_treatment_of_total = np.NaN
 
     # Add all of this to the dictionary:
@@ -655,25 +721,25 @@ def _make_stats_dict(trial, stroke_type_code):
     # Numbers:
     stats_dict['n_stroke_type'] = n_stroke_type
     stats_dict['n_total'] = n_total
-    stats_dict['n_IVT'] = n_IVT
-    stats_dict['n_MT'] = n_MT
-    stats_dict['n_IVT_no_effect'] = n_IVT_no_effect
-    stats_dict['n_MT_no_effect'] = n_MT_no_effect
+    stats_dict['n_ivt'] = n_ivt
+    stats_dict['n_mt'] = n_mt
+    stats_dict['n_ivt_no_effect'] = n_ivt_no_effect
+    stats_dict['n_mt_no_effect'] = n_mt_no_effect
     stats_dict['n_no_treatment'] = n_no_treatment
     # Proportions:
     stats_dict['prop_stroke_type'] = prop_stroke_type
-    stats_dict['prop_IVT_of_stroke_type'] = prop_IVT_of_stroke_type
-    stats_dict['prop_IVT_of_total'] = prop_IVT_of_total
-    stats_dict['prop_MT_of_stroke_type'] = prop_MT_of_stroke_type
-    stats_dict['prop_MT_of_total'] = prop_MT_of_total
-    stats_dict['prop_IVT_no_effect_of_stroke_type'] = \
-        prop_IVT_no_effect_of_stroke_type
-    stats_dict['prop_IVT_no_effect_of_total'] = \
-        prop_IVT_no_effect_of_total
-    stats_dict['prop_MT_no_effect_of_stroke_type'] = \
-        prop_MT_no_effect_of_stroke_type
-    stats_dict['prop_MT_no_effect_of_total'] = \
-        prop_MT_no_effect_of_total
+    stats_dict['prop_ivt_of_stroke_type'] = prop_ivt_of_stroke_type
+    stats_dict['prop_ivt_of_total'] = prop_ivt_of_total
+    stats_dict['prop_mt_of_stroke_type'] = prop_mt_of_stroke_type
+    stats_dict['prop_mt_of_total'] = prop_mt_of_total
+    stats_dict['prop_ivt_no_effect_of_stroke_type'] = \
+        prop_ivt_no_effect_of_stroke_type
+    stats_dict['prop_ivt_no_effect_of_total'] = \
+        prop_ivt_no_effect_of_total
+    stats_dict['prop_mt_no_effect_of_stroke_type'] = \
+        prop_mt_no_effect_of_stroke_type
+    stats_dict['prop_mt_no_effect_of_total'] = \
+        prop_mt_no_effect_of_total
     stats_dict['prop_no_treatment_of_stroke_type'] = \
         prop_no_treatment_of_stroke_type
     stats_dict['prop_no_treatment_of_total'] = \
@@ -719,28 +785,28 @@ def _make_stats_df(stats_dicts, labels=['nLVO', 'LVO', 'Other']):
         # Raw count of each category:
         counts = [
             stats_dict["n_stroke_type"],
-            stats_dict["n_IVT"],
-            stats_dict["n_MT"],
-            stats_dict["n_IVT_no_effect"],
-            stats_dict["n_MT_no_effect"],
+            stats_dict["n_ivt"],
+            stats_dict["n_mt"],
+            stats_dict["n_ivt_no_effect"],
+            stats_dict["n_mt_no_effect"],
             stats_dict["n_no_treatment"],
         ]
         # Proportion of this category out of this stroke type:
         props_of_this_stroke_type = [
             1.0,  # prop of this stroke type that have this stroke type
-            stats_dict["prop_IVT_of_stroke_type"],
-            stats_dict["prop_MT_of_stroke_type"],
-            stats_dict["prop_IVT_no_effect_of_stroke_type"],
-            stats_dict["prop_MT_no_effect_of_stroke_type"],
+            stats_dict["prop_ivt_of_stroke_type"],
+            stats_dict["prop_mt_of_stroke_type"],
+            stats_dict["prop_ivt_no_effect_of_stroke_type"],
+            stats_dict["prop_mt_no_effect_of_stroke_type"],
             stats_dict["prop_no_treatment_of_stroke_type"]
         ]
         # Proportion of this category out of the full cohort:
         props_of_full_cohort = [
             stats_dict["prop_stroke_type"],
-            stats_dict["prop_IVT_of_total"],
-            stats_dict["prop_MT_of_total"],
-            stats_dict["prop_IVT_no_effect_of_total"],
-            stats_dict["prop_MT_no_effect_of_total"],
+            stats_dict["prop_ivt_of_total"],
+            stats_dict["prop_mt_of_total"],
+            stats_dict["prop_ivt_no_effect_of_total"],
+            stats_dict["prop_mt_no_effect_of_total"],
             stats_dict["prop_no_treatment_of_total"]
         ]
 
