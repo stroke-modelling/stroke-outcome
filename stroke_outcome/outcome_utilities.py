@@ -11,6 +11,7 @@ the continuous and discrete methods.
 import pandas as pd
 import numpy as np
 from importlib_resources import files
+import numpy.typing as npt  # For type hinting.
 
 
 def import_mrs_dists_from_file():
@@ -67,7 +68,7 @@ def import_utility_dists_from_file():
     return utility_dists, utility_dists_notes
 
 
-def sanity_check_input_mrs_dists(mrs_dists):
+def sanity_check_input_mrs_dists(mrs_dists: pd.DataFrame):
     """
     Check that a mRS dists pandas DataFrame is legit.
 
@@ -93,10 +94,10 @@ def sanity_check_input_mrs_dists(mrs_dists):
 
 
 def sanity_check_mrs_dists_for_stroke_type(
-        mrs_distribution_probs,
-        stroke_type_codes,
-        ivt_chosen_bool,
-        mt_chosen_bool
+        mrs_distribution_probs: pd.DataFrame,
+        stroke_type_codes: npt.ArrayLike,
+        ivt_chosen_bool: npt.ArrayLike,
+        mt_chosen_bool: npt.ArrayLike
         ):
     """
     Check that all required mRS distributions have been given.
@@ -160,7 +161,7 @@ def sanity_check_mrs_dists_for_stroke_type(
         raise KeyError(error_str) from None
 
 
-def sanity_check_utility_weights(utility_weights):
+def sanity_check_utility_weights(utility_weights: npt.ArrayLike):
     """
     Check the input utility weights and replace them if necessary.
 
@@ -184,7 +185,7 @@ def sanity_check_utility_weights(utility_weights):
     return utility_weights
 
 
-def sanity_check_trial_input_lengths(trial, number_of_patients):
+def sanity_check_trial_input_lengths(trial: dict, number_of_patients: int):
     """
     Check that all user input arrays have the expected length.
 
@@ -225,7 +226,7 @@ def sanity_check_trial_input_lengths(trial, number_of_patients):
             length_warning_str = ''
 
 
-def extract_mrs_probs_and_logodds(mrs_dists):
+def extract_mrs_probs_and_logodds(mrs_dists: pd.DataFrame):
     """
     Make dictionaries of mRS probs and logodds from a pandas DataFrame.
 
@@ -249,8 +250,8 @@ def extract_mrs_probs_and_logodds(mrs_dists):
 
 
 def assign_nlvo_with_mt_as_lvo(
-        stroke_type_code,
-        mt_chosen_bool
+        stroke_type_code: npt.ArrayLike,
+        mt_chosen_bool: npt.ArrayLike
         ):
     """
     Find nLVO + MT patients and reassign them to LVO.
@@ -278,9 +279,9 @@ def assign_nlvo_with_mt_as_lvo(
 
 
 def assign_treatment_no_effect(
-        treatment_chosen_bool,
-        onset_to_treatment_mins,
-        time_no_effect_mins
+        treatment_chosen_bool: npt.ArrayLike,
+        onset_to_treatment_mins: npt.ArrayLike,
+        time_no_effect_mins: float
         ):
     """
     Assign which patients receive treatment after the no effect time.
@@ -310,10 +311,10 @@ The wrappers are for:
 
 
 def calculate_post_stroke_mrs_dists_for_lvo_ivt(
-        mrs_distribution_probs,
-        mrs_distribution_logodds,
-        trial,
-        ivt_time_no_effect_mins
+        mrs_distribution_probs: dict,
+        mrs_distribution_logodds: dict,
+        trial: dict,
+        ivt_time_no_effect_mins: float
         ):
     """
     Calculate post-stroke mRS dists for LVO treated with IVT.
@@ -372,10 +373,10 @@ def calculate_post_stroke_mrs_dists_for_lvo_ivt(
 
 
 def calculate_post_stroke_mrs_dists_for_lvo_mt(
-        mrs_distribution_probs,
-        mrs_distribution_logodds,
-        trial,
-        mt_time_no_effect_mins
+        mrs_distribution_probs: dict,
+        mrs_distribution_logodds: dict,
+        trial: dict,
+        mt_time_no_effect_mins: float
         ):
     """
     Calculate post-stroke mRS dists for LVO treated with MT.
@@ -432,10 +433,10 @@ def calculate_post_stroke_mrs_dists_for_lvo_mt(
 
 
 def calculate_post_stroke_mrs_dists_for_nlvo_ivt(
-        mrs_distribution_probs,
-        mrs_distribution_logodds,
-        trial,
-        ivt_time_no_effect_mins
+        mrs_distribution_probs: dict,
+        mrs_distribution_logodds: dict,
+        trial: dict,
+        ivt_time_no_effect_mins: float
         ):
     """
     Calculate post-stroke mRS dists for nLVO treated with IVT.
@@ -495,15 +496,15 @@ def calculate_post_stroke_mrs_dists_for_nlvo_ivt(
 
 
 def _calculate_probs_at_treatment_time(
-        t0_logodds,
-        no_effect_logodds,
-        time_to_treatment_mins,
-        time_no_effect_mins,
-        mask_treated,
-        mask_no_effect,
-        mask_valid,
-        not_treated_probs,
-        no_effect_probs
+        t0_logodds: npt.ArrayLike,
+        no_effect_logodds: npt.ArrayLike,
+        time_to_treatment_mins: npt.ArrayLike,
+        time_no_effect_mins: float,
+        mask_treated: npt.ArrayLike,
+        mask_no_effect: npt.ArrayLike,
+        mask_valid: npt.ArrayLike,
+        not_treated_probs: npt.ArrayLike,
+        no_effect_probs: npt.ArrayLike
         ):
     """
     Calculates mRS distributions for treatment at a given time.
@@ -616,11 +617,11 @@ def _calculate_probs_at_treatment_time(
 
 
 def calculate_mrs_dist_at_treatment_time(
-        time_to_treatment_mins,
-        time_no_effect_mins,
-        t0_logodds,
-        no_effect_logodds,
-        final_value_is_mrs6=True
+        time_to_treatment_mins: npt.ArrayLike,
+        time_no_effect_mins: float,
+        t0_logodds: npt.ArrayLike,
+        no_effect_logodds: npt.ArrayLike,
+        final_value_is_mrs6: bool = True
         ):
     """
     Calculate the mRS distribution at arbitrary treatment time(s).
@@ -691,7 +692,7 @@ def calculate_mrs_dist_at_treatment_time(
     return treated_probs, treated_odds, treated_logodds
 
 
-def calculate_patient_population_stats(trial):
+def calculate_patient_population_stats(trial: dict):
     """
     Create dicts and dataframes of patient breakdown by treatment type.
 
@@ -724,7 +725,7 @@ def calculate_patient_population_stats(trial):
     return stats_df
 
 
-def _make_stats_dict(trial, stroke_type_code):
+def _make_stats_dict(trial: dict, stroke_type_code: int):
     """
     Makes dict of stats for patients in each category.
 
@@ -847,13 +848,15 @@ def _make_stats_dict(trial, stroke_type_code):
     return stats_dict
 
 
-def _make_stats_df(stats_dicts, labels=['nLVO', 'LVO', 'Other']):
+def _make_stats_df(
+        stats_dicts: list, labels: list = ['nLVO', 'LVO', 'Other']):
     """
     Rearrange the stats dictionary into a pandas DataFrame.
 
     Inputs:
     -------
-    stats_dict      - dict. Output from _make_stats_dict(). Contains
+    stats_dict      - list of dicts. Each dict is the output from
+                      _make_stats_dict(). Contains
                       various measures of the patient population.
     stroke_type_str - str. Name for the dataframe.
 
@@ -927,9 +930,9 @@ def _make_stats_df(stats_dicts, labels=['nLVO', 'LVO', 'Other']):
 
 
 def _merge_results_dicts(
-        results_dicts,
-        labels_for_dicts,
-        final_dict={}
+        results_dicts: list,
+        labels_for_dicts: list,
+        final_dict: dict = {}
         ):
     """
     Merge multiple dictionaries into one dictionary.

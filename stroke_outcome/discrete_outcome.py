@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import numpy.typing as npt  # For type hinting.
 
 from .evaluated_array import Evaluated_array
 import stroke_outcome.outcome_utilities as ou
@@ -178,7 +179,7 @@ class Discrete_outcome:
             self,
             mrs_dists: pd.DataFrame,
             number_of_patients: int,
-            utility_weights: np.array = np.array([]),
+            utility_weights: npt.ArrayLike = np.array([]),
             ivt_time_no_effect_mins: float = 378.0,
             mt_time_no_effect_mins: float = 480.0
             ):
@@ -479,7 +480,8 @@ class Discrete_outcome:
 
     The wrappers are for _create_mrs_utility_dict().
     """
-    def calculate_outcomes_dict_for_lvo_ivt(self, post_stroke_probs):
+    def calculate_outcomes_dict_for_lvo_ivt(
+            self, post_stroke_probs: npt.ArrayLike):
         """
         Wrapper for _create_mrs_utility_dict() for LVO with IVT.
 
@@ -515,7 +517,8 @@ class Discrete_outcome:
             )
         return outcomes_dict
 
-    def calculate_outcomes_dict_for_lvo_mt(self, post_stroke_probs):
+    def calculate_outcomes_dict_for_lvo_mt(
+            self, post_stroke_probs: npt.ArrayLike):
         """
         Wrapper for _create_mrs_utility_dict() for LVO with MT.
 
@@ -551,7 +554,8 @@ class Discrete_outcome:
             )
         return outcomes_dict
 
-    def calculate_outcomes_dict_for_nlvo_ivt(self, post_stroke_probs):
+    def calculate_outcomes_dict_for_nlvo_ivt(
+            self, post_stroke_probs: npt.ArrayLike):
         """
         Wrapper for _create_mrs_utility_dict() for nLVO with IVT.
 
@@ -636,7 +640,8 @@ class Discrete_outcome:
             x_full_cohort[inds_here] = x_scores
         return x_full_cohort
 
-    def assign_x_by_mrs_score_uniform(self, mrs_scores, mrs_dist):
+    def assign_x_by_mrs_score_uniform(
+            self, mrs_scores: npt.ArrayLike, mrs_dist: npt.ArrayLike):
         """
         Convert mRS scores to x values by random uniform sampling.
 
@@ -695,7 +700,11 @@ class Discrete_outcome:
         # initial mRS value set above (0).
         return mRS_scores_full_cohort
 
-    def find_mrs_score_from_x(self, x, mrs_dist):
+    def find_mrs_score_from_x(
+            self,
+            x: npt.ArrayLike or float,
+            mrs_dist: npt.ArrayLike or float
+            ):
         """
         Convert an x score to mRS score using an mRS distribution.
 
@@ -727,10 +736,10 @@ class Discrete_outcome:
 
     def _create_mrs_utility_dict(
             self,
-            post_stroke_probs,
-            not_treated_probs,
-            x_each_patient,
-            mask_treated
+            post_stroke_probs: npt.ArrayLike,
+            not_treated_probs: npt.ArrayLike,
+            x_each_patient: npt.ArrayLike,
+            mask_treated: npt.ArrayLike
             ):
         """
         Create a dictionary of useful mRS dist and utility values.
@@ -922,7 +931,7 @@ class Discrete_outcome:
 
         return results
 
-    def _calculate_patient_outcomes(self, dict_results_by_category):
+    def _calculate_patient_outcomes(self, dict_results_by_category: dict):
         """
         Find the outcomes for the full cohort from existing results.
 

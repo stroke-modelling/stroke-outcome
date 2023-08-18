@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import numpy.typing as npt  # For type hinting.
 
 from .evaluated_array import Evaluated_array
 import stroke_outcome.outcome_utilities as ou
@@ -159,7 +160,7 @@ class Continuous_outcome:
             self,
             mrs_dists: pd.DataFrame,
             number_of_patients: int,
-            utility_weights: np.array = np.array([]),
+            utility_weights: npt.ArrayLike = np.array([]),
             ivt_time_no_effect_mins: float = 378.0,
             mt_time_no_effect_mins: float = 480.0
             ):
@@ -443,7 +444,8 @@ class Continuous_outcome:
     The wrappers are for _calculate_outcomes_dict(),
     which is itself a wrapper(!!) for _create_mrs_utility_dict().
     """
-    def calculate_outcomes_dict_for_lvo_ivt(self, post_stroke_probs):
+    def calculate_outcomes_dict_for_lvo_ivt(
+            self, post_stroke_probs: npt.ArrayLike):
         """
         Wrapper for _calculate_outcomes_dict() for LVO with IVT.
         """
@@ -467,7 +469,8 @@ class Continuous_outcome:
             )
         return outcomes_dict
 
-    def calculate_outcomes_dict_for_lvo_mt(self, post_stroke_probs):
+    def calculate_outcomes_dict_for_lvo_mt(
+            self, post_stroke_probs: npt.ArrayLike):
         """
         Wrapper for _calculate_outcomes_dict() for LVO with MT.
         """
@@ -491,7 +494,8 @@ class Continuous_outcome:
             )
         return outcomes_dict
 
-    def calculate_outcomes_dict_for_nlvo_ivt(self, post_stroke_probs):
+    def calculate_outcomes_dict_for_nlvo_ivt(
+            self, post_stroke_probs: npt.ArrayLike):
         """
         Wrapper for _calculate_outcomes_dict() for nLVO with IVT.
         """
@@ -517,10 +521,10 @@ class Continuous_outcome:
 
     def calculate_outcomes_dict(
             self,
-            post_stroke_probs,
-            not_treated_probs,
-            no_effect_probs,
-            treatment_chosen_bool
+            post_stroke_probs: npt.ArrayLike,
+            not_treated_probs: npt.ArrayLike,
+            no_effect_probs: npt.ArrayLike,
+            treatment_chosen_bool: npt.ArrayLike
             ):
         """
         Calculate continuous outcomes dictionaries.
@@ -600,9 +604,9 @@ class Continuous_outcome:
     """
     def _create_mrs_utility_dict(
             self,
-            post_stroke_probs,
-            not_treated_probs,
-            no_effect_probs
+            post_stroke_probs: npt.ArrayLike,
+            not_treated_probs: npt.ArrayLike,
+            no_effect_probs: npt.ArrayLike
             ):
         """
         Create a dictionary of useful mRS dist and utility values.
@@ -686,7 +690,7 @@ class Continuous_outcome:
 
         return results
 
-    def _calculate_patient_outcomes(self, dict_results_by_category):
+    def _calculate_patient_outcomes(self, dict_results_by_category: dict):
         """
         Find the outcomes for the full cohort from existing results.
 
