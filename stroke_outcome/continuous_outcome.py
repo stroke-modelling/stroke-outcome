@@ -42,20 +42,19 @@ class Continuous_outcome:
     - LVO not treated with MT
     - LVO treated with MT
     Each category contains the following info:
-    - each_patient_post_stroke_mrs_dist
-    - not_treated_mean_mrs
-    - no_effect_mean_mrs
-    - each_patient_post_stroke_mean_mrs
-    - each_patient_mean_mrs_shift
-    - not_treated_mean_utility
-    - no_effect_mean_utility
-    - each_patient_post_stroke_mean_utility
-    - each_patient_mean_added_utility
-    - proportion_of_whole_cohort_improved
-    - mean_valid_patients_mean_mrs_shift
-    - mean_valid_patients_mean_added_utility
-    - treated_population_mean_valid_patients_mean_mrs_shift
-    - treated_population_mean_valid_patients_mean_added_utility
+    - each_patient_mrs_dist_post_stroke
+    - mrs_not_treated
+    - mrs_no_effect
+    - each_patient_mrs_post_stroke
+    - each_patient_mrs_shift
+    - utility_not_treated
+    - utility_no_effect
+    - each_patient_utility_post_stroke
+    - each_patient_utility_shift
+    - valid_patients_mean_mrs_shift
+    - valid_patients_mean_utility_shift
+    - treated_patients_mean_mrs_shift
+    - treated_patients_mean_utility_shift
 
     The full_cohort_outcomes results dictionary
     takes the results from the separate results dictionaries and
@@ -63,15 +62,15 @@ class Continuous_outcome:
     (nLVO+IVT, LVO+IVT, LVO+MT).
     The output arrays contain x values, one for each patient.
     Contents of returned dictionary:
-    - each_patient_post_stroke_mrs_dist                     x by 7 grid
-    - each_patient_post_stroke_mean_mrs                        x floats
-    - each_patient_mean_mrs_shift                              x floats
-    - each_patient_post_stroke_mean_utility                    x floats
-    - each_patient_mean_added_utility                          x floats
-    - post_stroke_mean_mrs                                      1 float
+    - each_patient_mrs_dist_post_stroke                     x by 7 grid
+    - each_patient_mrs_post_stroke                        x floats
+    - each_patient_mrs_shift                              x floats
+    - each_patient_utility_post_stroke                    x floats
+    - each_patient_utility_shift                          x floats
+    - mean_mrs_post_stroke                                      1 float
     - mean_mrs_shift                                            1 float
     - mean_utility                                              1 float
-    - mean_added_utility                                        1 float
+    - mean_utility_shift                                        1 float
 
     Utility-weighted mRS
     --------------------
@@ -318,17 +317,17 @@ class Continuous_outcome:
         - LVO treated with IVT
         - LVO treated with MT
         Each category contains the following info:
-        - each_patient_post_stroke_mrs_dist
-        - not_treated_mean_mrs
-        - no_effect_mean_mrs
-        - each_patient_post_stroke_mean_mrs
-        - each_patient_mean_mrs_shift
-        - not_treated_mean_utility
-        - no_effect_mean_utility
-        - each_patient_post_stroke_mean_utility
-        - each_patient_mean_added_utility
-        - mean_valid_patients_mean_mrs_shift
-        - mean_valid_patients_mean_added_utility'
+        - each_patient_mrs_dist_post_stroke
+        - mrs_not_treated
+        - mrs_no_effect
+        - each_patient_mrs_post_stroke
+        - each_patient_mrs_shift
+        - utility_not_treated
+        - utility_no_effect
+        - each_patient_utility_post_stroke
+        - each_patient_utility_shift
+        - valid_patients_mean_mrs_shift
+        - valid_patients_mean_utility_shift'
 
         The full_cohort_outcomes results dictionary
         takes the results from the separate results dictionaries and
@@ -336,15 +335,15 @@ class Continuous_outcome:
         (nLVO+IVT, LVO+IVT, LVO+MT).
         The output arrays contain x values, one for each patient.
         Contents of returned dictionary:
-        - each_patient_post_stroke_mrs_dist                 x by 7 grid
-        - each_patient_post_stroke_mean_mrs                    x floats
-        - each_patient_mean_mrs_shift                          x floats
-        - each_patient_post_stroke_mean_utility                x floats
-        - each_patient_mean_added_utility                      x floats
-        - post_stroke_mean_mrs                                  1 float
+        - each_patient_mrs_dist_post_stroke                 x by 7 grid
+        - each_patient_mrs_post_stroke                         x floats
+        - each_patient_mrs_shift                               x floats
+        - each_patient_utility_post_stroke                     x floats
+        - each_patient_utility_shift                           x floats
+        - mean_mrs_post_stroke                                  1 float
         - mean_mrs_shift                                        1 float
         - mean_utility                                          1 float
-        - mean_added_utility                                    1 float
+        - mean_utility_shift                                    1 float
         """
         # ##### Sanity checks #####
         ou.sanity_check_trial_input_lengths(
@@ -546,20 +545,19 @@ class Continuous_outcome:
 
         Outputs:
         A dictionary containing the following:
-        - each_patient_post_stroke_mrs_dist
-        - not_treated_mean_mrs
-        - no_effect_mean_mrs
-        - each_patient_post_stroke_mean_mrs
-        - each_patient_mean_mrs_shift
-        - not_treated_mean_utility
-        - no_effect_mean_utility
-        - each_patient_post_stroke_mean_utility
-        - each_patient_mean_added_utility
-        - proportion_of_whole_cohort_improved
-        - mean_valid_patients_mean_mrs_shift
-        - mean_valid_patients_mean_added_utility
-        - treated_population_mean_valid_patients_mean_mrs_shift
-        - treated_population_mean_valid_patients_mean_added_utility
+        - each_patient_mrs_dist_post_stroke
+        - mrs_not_treated
+        - mrs_no_effect
+        - each_patient_mrs_post_stroke
+        - each_patient_mrs_shift
+        - utility_not_treated
+        - utility_no_effect
+        - each_patient_utility_post_stroke
+        - each_patient_utility_shift
+        - valid_patients_mean_mrs_shift
+        - valid_patients_mean_utility_shift
+        - treated_patients_mean_mrs_shift
+        - treated_patients_mean_utility_shift
         """
         # Find mean mRS and utility values in these results dictionary.
         # The results for all patients...
@@ -576,11 +574,13 @@ class Continuous_outcome:
             )
         # Merge the two dictionaries:
         keys_to_merge = [
-            'mean_valid_patients_mean_mrs_shift',
-            'mean_valid_patients_mean_added_utility'
+            'valid_patients_mean_mrs_shift',
+            'valid_patients_mean_utility_shift'
             ]
         for key in keys_to_merge:
-            results_dict['treated_population_' + key] = (
+            new_key = ('treated_patients_' +
+                       key.split('valid_patients_')[1])
+            results_dict[new_key] = (
                 results_treated_dict[key])
 
         return results_dict
@@ -640,30 +640,30 @@ class Continuous_outcome:
         results = dict()
 
         # mRS distributions:
-        results['each_patient_post_stroke_mrs_dist'] = (
+        results['each_patient_mrs_dist_post_stroke'] = (
             post_stroke_probs)                                   # x by 7 grid
         # mean values:
-        results['not_treated_mean_mrs'] = np.sum(
+        results['mrs_not_treated'] = np.sum(
             not_treated_noncum_dist * np.arange(7))                  # 1 float
-        results['no_effect_mean_mrs'] = np.sum(
+        results['mrs_no_effect'] = np.sum(
             no_effect_noncum_dist * np.arange(7))                    # 1 float
-        results['each_patient_post_stroke_mean_mrs'] = np.sum(
+        results['each_patient_mrs_post_stroke'] = np.sum(
             post_stroke_noncum_dist * np.arange(7), axis=1)         # x floats
         # Change from not-treated distribution:
-        results['each_patient_mean_mrs_shift'] = (
+        results['each_patient_mrs_shift'] = (
             np.sum(post_stroke_noncum_dist * np.arange(7), axis=1)
-            - results['not_treated_mean_mrs']
+            - results['mrs_not_treated']
             )                                                       # x floats
 
         # Utility-weighted mRS distributions:
         # mean values:
-        results['not_treated_mean_utility'] = np.sum(
+        results['utility_not_treated'] = np.sum(
             not_treated_util)                                        # 1 float
-        results['no_effect_mean_utility'] = np.sum(no_effect_util)   # 1 float
-        results['each_patient_post_stroke_mean_utility'] = np.sum(
+        results['utility_no_effect'] = np.sum(no_effect_util)   # 1 float
+        results['each_patient_utility_post_stroke'] = np.sum(
             post_stroke_util, axis=1)                               # x floats
         # Change from not-treated distribution:
-        results['each_patient_mean_added_utility'] = (
+        results['each_patient_utility_shift'] = (
             np.sum(post_stroke_util, axis=1) - np.sum(not_treated_util)
             )                                                       # x floats
 
@@ -671,16 +671,16 @@ class Continuous_outcome:
         # Use nanmean here because invalid patient data is set to NaN,
         # e.g. patients who have nLVO when we're calculating
         # results for patients with LVOs.
-        results['mean_valid_patients_mean_mrs_shift'] = (
-            np.nanmean(results['each_patient_mean_mrs_shift'])       # 1 float
+        results['valid_patients_mean_mrs_shift'] = (
+            np.nanmean(results['each_patient_mrs_shift'])       # 1 float
             if len(np.where(~np.isnan(
-                results['each_patient_mean_mrs_shift']))[0]) > 0
+                results['each_patient_mrs_shift']))[0]) > 0
             else np.NaN
             )
-        results['mean_valid_patients_mean_added_utility'] = (
-            np.nanmean(results['each_patient_mean_added_utility'])   # 1 float
+        results['valid_patients_mean_utility_shift'] = (
+            np.nanmean(results['each_patient_utility_shift'])   # 1 float
             if len(np.where(~np.isnan(
-                results['each_patient_mean_added_utility']))[0]) > 0
+                results['each_patient_utility_shift']))[0]) > 0
             else np.NaN
             )
 
@@ -699,16 +699,15 @@ class Continuous_outcome:
         as input (nLVO+IVT, LVO+IVT, LVO+MT).
 
         Contents of returned dictionary:
-        - each_patient_post_stroke_mrs_dist                 x by 7 grid
-        - each_patient_post_stroke_mean_mrs                    x floats
-        - each_patient_mean_mrs_shift                          x floats
-        - each_patient_post_stroke_mean_utility                x floats
-        - each_patient_mean_added_utility                      x floats
-        - post_stroke_mean_mrs                                  1 float
+        - each_patient_mrs_dist_post_stroke                 x by 7 grid
+        - each_patient_mrs_post_stroke                         x floats
+        - each_patient_mrs_shift                               x floats
+        - each_patient_utility_post_stroke                     x floats
+        - each_patient_utility_shift                           x floats
+        - mean_mrs_post_stroke                                  1 float
         - mean_mrs_shift                                        1 float
         - mean_utility                                          1 float
-        - mean_added_utility                                    1 float
-        - proportion_improved                                   1 float
+        - mean_utility_shift                                    1 float
 
         Inputs:
         -------
@@ -747,12 +746,12 @@ class Continuous_outcome:
         # When both treatments give the same shift in mRS,
         # arbitrarily prioritise the MT data over IVT.
         inds_lvo_ivt_better_than_mt = np.where(
-            dict_results_by_category['lvo_ivt_each_patient_mean_mrs_shift'] <
-            dict_results_by_category['lvo_mt_each_patient_mean_mrs_shift']
+            dict_results_by_category['lvo_ivt_each_patient_mrs_shift'] <
+            dict_results_by_category['lvo_mt_each_patient_mrs_shift']
             )[0]
         inds_lvo_mt_better_than_ivt = np.where(
-            dict_results_by_category['lvo_mt_each_patient_mean_mrs_shift'] <=
-            dict_results_by_category['lvo_ivt_each_patient_mean_mrs_shift']
+            dict_results_by_category['lvo_mt_each_patient_mrs_shift'] <=
+            dict_results_by_category['lvo_ivt_each_patient_mrs_shift']
             )[0]
 
         inds = [inds_lvo_not_mt, inds_lvo_mt_only, inds_nlvo_ivt,
@@ -763,29 +762,29 @@ class Continuous_outcome:
 
         # Define new empty arrays that will be filled with results
         # from the existing results dictionaries.
-        each_patient_post_stroke_mrs_dist = np.full(
+        each_patient_mrs_dist_post_stroke = np.full(
             dict_results_by_category[
-                labels[0] + '_each_patient_post_stroke_mrs_dist'].shape,
+                labels[0] + '_each_patient_mrs_dist_post_stroke'].shape,
             np.NaN
             )
-        each_patient_post_stroke_mean_mrs = np.full(
+        each_patient_mrs_post_stroke = np.full(
             dict_results_by_category[
-                labels[0] + '_each_patient_post_stroke_mean_mrs'].shape,
+                labels[0] + '_each_patient_mrs_post_stroke'].shape,
             np.NaN
             )
-        each_patient_mean_mrs_shift = np.full(
+        each_patient_mrs_shift = np.full(
             dict_results_by_category[
-                labels[0] + '_each_patient_mean_mrs_shift'].shape,
+                labels[0] + '_each_patient_mrs_shift'].shape,
             np.NaN
             )
-        each_patient_post_stroke_mean_utility = np.full(
+        each_patient_utility_post_stroke = np.full(
             dict_results_by_category[
-                labels[0] + '_each_patient_post_stroke_mean_utility'].shape,
+                labels[0] + '_each_patient_utility_post_stroke'].shape,
             np.NaN
             )
-        each_patient_mean_added_utility = np.full(
+        each_patient_utility_shift = np.full(
             dict_results_by_category[
-                labels[0] + '_each_patient_mean_added_utility'].shape,
+                labels[0] + '_each_patient_utility_shift'].shape,
             np.NaN
             )
 
@@ -793,63 +792,63 @@ class Continuous_outcome:
             inds_here = inds[i]
 
             # mRS distributions:
-            each_patient_post_stroke_mrs_dist[inds_here, :] = (
+            each_patient_mrs_dist_post_stroke[inds_here, :] = (
                 dict_results_by_category
-                [label + '_each_patient_post_stroke_mrs_dist']
+                [label + '_each_patient_mrs_dist_post_stroke']
                 [inds_here, :]
                 )                                                # x by 7 grid
-            each_patient_post_stroke_mean_mrs[inds_here] = (
+            each_patient_mrs_post_stroke[inds_here] = (
                 dict_results_by_category
-                [label + '_each_patient_post_stroke_mean_mrs']
+                [label + '_each_patient_mrs_post_stroke']
                 [inds_here]
                 )                                                   # x floats
             # Change from not-treated distribution:
-            each_patient_mean_mrs_shift[inds_here] = (
+            each_patient_mrs_shift[inds_here] = (
                 dict_results_by_category
-                [label + '_each_patient_mean_mrs_shift']
+                [label + '_each_patient_mrs_shift']
                 [inds_here]
                 )                                                   # x floats
 
             # Utility-weighted mRS distributions:
             # mean values:
-            each_patient_post_stroke_mean_utility[inds_here] = (
+            each_patient_utility_post_stroke[inds_here] = (
                 dict_results_by_category
-                [label + '_each_patient_post_stroke_mean_utility']
+                [label + '_each_patient_utility_post_stroke']
                 [inds_here]
                 )                                                   # x floats
             # Change from not-treated distribution:
-            each_patient_mean_added_utility[inds_here] = (
+            each_patient_utility_shift[inds_here] = (
                 dict_results_by_category
-                [label + '_each_patient_mean_added_utility']
+                [label + '_each_patient_utility_shift']
                 [inds_here]
                 )                                                   # x floats
 
         # Average these results over all patients:
-        post_stroke_mean_mrs = \
-            np.nanmean(each_patient_post_stroke_mean_mrs)            # 1 float
+        mean_mrs_post_stroke = \
+            np.nanmean(each_patient_mrs_post_stroke)            # 1 float
         mean_mrs_shift = \
-            np.nanmean(each_patient_mean_mrs_shift)                  # 1 float
+            np.nanmean(each_patient_mrs_shift)                  # 1 float
         mean_utility = \
-            np.nanmean(each_patient_post_stroke_mean_utility)        # 1 float
-        mean_added_utility = \
-            np.nanmean(each_patient_mean_added_utility)              # 1 float
+            np.nanmean(each_patient_utility_post_stroke)        # 1 float
+        mean_utility_shift = \
+            np.nanmean(each_patient_utility_shift)              # 1 float
 
         # Create dictionary for combined full cohort outcomes:
         full_cohort_outcomes = dict(
-            each_patient_post_stroke_mrs_dist=(
-                each_patient_post_stroke_mrs_dist),              # x by 7 grid
-            each_patient_post_stroke_mean_mrs=(
-                each_patient_post_stroke_mean_mrs),                 # x floats
-            each_patient_mean_mrs_shift=(
-                each_patient_mean_mrs_shift),                       # x floats
-            each_patient_post_stroke_mean_utility=(
-                each_patient_post_stroke_mean_utility),             # x floats
-            each_patient_mean_added_utility=(
-                each_patient_mean_added_utility),                   # x floats
-            post_stroke_mean_mrs=post_stroke_mean_mrs,               # 1 float
+            each_patient_mrs_dist_post_stroke=(
+                each_patient_mrs_dist_post_stroke),              # x by 7 grid
+            each_patient_mrs_post_stroke=(
+                each_patient_mrs_post_stroke),                 # x floats
+            each_patient_mrs_shift=(
+                each_patient_mrs_shift),                       # x floats
+            each_patient_utility_post_stroke=(
+                each_patient_utility_post_stroke),             # x floats
+            each_patient_utility_shift=(
+                each_patient_utility_shift),                   # x floats
+            mean_mrs_post_stroke=mean_mrs_post_stroke,               # 1 float
             mean_mrs_shift=mean_mrs_shift,                           # 1 float
             mean_utility=mean_utility,                               # 1 float
-            mean_added_utility=mean_added_utility,                   # 1 float
+            mean_utility_shift=mean_utility_shift,                   # 1 float
             )
 
         # Save to instance:

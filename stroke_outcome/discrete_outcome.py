@@ -50,8 +50,10 @@ class Discrete_outcome:
     - each_patient_mrs_shift
     - each_patient_utility_shift
     - valid_patients_mean_mrs_post_stroke
+    - valid_patients_mean_mrs_not_treated
     - valid_patients_mean_mrs_shift
     - valid_patients_mean_utility_post_stroke
+    - valid_patients_mean_utility_not_treated
     - valid_patients_mean_utility_shift
     - treated_patients_mean_mrs_post_stroke
     - treated_patients_mean_mrs_shift
@@ -70,15 +72,18 @@ class Discrete_outcome:
     (nLVO+IVT, LVO+IVT, LVO+MT).
     The output arrays contain x values, one for each patient.
     Contents of returned dictionary:
-    - each_patient_mrs_dist_post_stroke                     x by 7 grid
-    - each_patient_mrs_post_stroke                             x floats
-    - each_patient_mrs_shift                                   x floats
-    - each_patient_utility_post_stroke                         x floats
-    - each_patient_utility_shift                               x floats
-    - mean_mrs_post_stroke                                      1 float
-    - mean_mrs_shift                                            1 float
-    - mean_utility                                              1 float
-    - mean_utility_shift                                        1 float
+    - each_patient_mrs_dist_post_stroke                 x by 7 grid
+    - each_patient_mrs_post_stroke                         x floats
+    - each_patient_mrs_not_treated                         x floats
+    - each_patient_mrs_shift                               x floats
+    - each_patient_utility_post_stroke                     x floats
+    - each_patient_utility_not_treated                     x floats
+    - each_patient_utility_shift                           x floats
+    - mean_mrs_post_stroke                                  1 float
+    - mean_mrs_shift                                        1 float
+    - mean_utility                                          1 float
+    - mean_utility_shift                                    1 float
+    - proportion_improved                                   1 float
 
 
     Utility-weighted mRS
@@ -346,13 +351,16 @@ class Discrete_outcome:
         Contents of returned dictionary:
         - each_patient_mrs_dist_post_stroke                 x by 7 grid
         - each_patient_mrs_post_stroke                         x floats
+        - each_patient_mrs_not_treated                         x floats
         - each_patient_mrs_shift                               x floats
         - each_patient_utility_post_stroke                     x floats
+        - each_patient_utility_not_treated                     x floats
         - each_patient_utility_shift                           x floats
         - mean_mrs_post_stroke                                  1 float
         - mean_mrs_shift                                        1 float
         - mean_utility                                          1 float
         - mean_utility_shift                                    1 float
+        - proportion_improved                                   1 float
         """
         # ##### Sanity checks #####
         ou.sanity_check_trial_input_lengths(
@@ -743,7 +751,7 @@ class Discrete_outcome:
                 mRS_here = self.find_mrs_score_from_x(x, mRS_dist)
             each_patient_mrs_post_stroke.append(mRS_here)
         results['each_patient_mrs_post_stroke'] = (
-            np.array(each_patient_mrs_post_stroke))                           # x floats
+            np.array(each_patient_mrs_post_stroke))                 # x floats
 
         # Convert to utility.
         # Leave the invalid patients as np.NaN and update the values
@@ -1045,7 +1053,7 @@ class Discrete_outcome:
             mean_mrs_not_treated=mean_mrs_not_treated,               # 1 float
             mean_mrs_shift=mean_mrs_shift,                           # 1 float
             mean_utility=mean_utility,                               # 1 float
-            mean_utility_not_treated=mean_utility_not_treated,                               # 1 float
+            mean_utility_not_treated=mean_utility_not_treated,       # 1 float
             mean_utility_shift=mean_utility_shift,                   # 1 float
             )
 
