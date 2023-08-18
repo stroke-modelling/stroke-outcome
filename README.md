@@ -46,10 +46,11 @@ The package includes the following data:
 + mRS cumulative probability distributions as derived in [the online book][jupyterbooks-link].
 + A selection of utility scores for each mRS level.
 
-Optionally, other data can be used instead of these provided files. The required formats are described in [the continuous outcome demo][jupyternotebook-continuous-link].
+Optionally, other data can be used instead of these provided files. The required formats are described in [the continuous outcome demo][continuous-jupyternotebook-link].
 
 The package includes the following processes:
-+ __Continuous outcomes:__ Each "patient" uses the population mRS probability distribution rather than being assigned a single mRS score.
++ __Continuous outcomes:__ Each "patient" uses the population mRS probability distribution rather than being assigned a single mRS score. The average mRS score may be any number between 0 and 6, for example 1.2.
++ __Discrete outcomes:__ Each patient is given a single mRS score out of the population mRS probability distribution. The score must be a whole number from 0 to 6.
 
 
 ## 📚 External resources
@@ -58,11 +59,15 @@ The following resources are not included within the package files and are access
 
 Each major aspect of the package has a __demonstration__ and a __documentation__ file. The demonstration is a minimal example of running the code, and the documentation uses a simple example to show the concepts behind the methods.
 
-A conda environment file, `environment.yml`, is provided in the [GitHub repository][github-link] for use with the demonstration Jupyter notebooks.
+A conda environment file, `environment.yml`, is provided in the GitHub repository for use with the demonstration Jupyter notebooks.
 
 __Continuous outcomes:__
-  + [![Jupyter Notebook][jupyternotebook-img]][jupyternotebook-continuous-link] [Demo][jupyternotebook-continuous-link] 
-  + [![Jupyter Notebook][jupyternotebook-img]][documentation-continuous-link] [Docs][documentation-continuous-link]
+  + [![Jupyter Notebook][jupyternotebook-img]][continuous-jupyternotebook-link] [Demo][continuous-jupyternotebook-link] 
+  + [![Jupyter Notebook][jupyternotebook-img]][continuous-documentation-link] [Docs][continuous-documentation-link]
+
+__Discrete outcomes:__
+  + [![Jupyter Notebook][jupyternotebook-img]][discrete-jupyternotebook-link] [Demo][discrete-jupyternotebook-link] 
+  + [![Jupyter Notebook][jupyternotebook-img]][discrete-documentation-link] [Docs][discrete-documentation-link]
 
 
 
@@ -76,5 +81,9 @@ __Continuous outcomes:__
 [jupyterbooks-link]: https://samuel-book.github.io/stroke_outcome/intro.html
 
 [jupyternotebook-img]: https://img.shields.io/badge/jupyter-%23FA0F00.svg?style=for-the-badge&logo=jupyter&logoColor=white
-[jupyternotebook-continuous-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/demo/demo_continuous_outcomes.ipynb
-[documentation-continuous-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/docs/docs_continuous_outcome.ipynb
+
+[continuous-jupyternotebook-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/demo/demo_continuous_outcomes.ipynb
+[continuous-documentation-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/docs/docs_continuous_outcome.ipynb
+
+[discrete-jupyternotebook-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/demo/demo_discrete_outcomes.ipynb
+[discrete-documentation-link]: https://github.com/stroke-modelling/stroke-outcome/blob/main/docs/docs_discrete_outcome.ipynb
