@@ -1,7 +1,7 @@
 # Stroke outcome
 
 
-[![GitHub Badge][github-img]][github-link] [![Jupyter Book Badge][jupyterbooks-img]][jupyterbooks-link] [![PyPI][pypi-img]][pypi-link]
+[![GitHub Badge][github-img]][github-link] [![Jupyter Book Badge][jupyterbooks-img]][jupyterbooks-link] [![PyPI][pypi-img]][pypi-link] [![DOI][doi-img]][doi-link]
 
 Toolkit for calculating patient outcomes after stroke depending on time to treatment.
 
@@ -77,6 +77,9 @@ A conda environment file, `environment.yml`, is provided in the GitHub repositor
 
 [pypi-img]: https://img.shields.io/pypi/v/stroke-outcome?label=pypi%20package
 [pypi-link]: https://pypi.org/project/stroke-outcome/
+
+[doi-img]: https://zenodo.org/badge/673336639.svg
+[doi-link]: https://zenodo.org/badge/latestdoi/673336639
 
 [jupyterbooks-img]: https://jupyterbook.org/badge.svg
 [jupyterbooks-link]: https://samuel-book.github.io/stroke_outcome/intro.html
