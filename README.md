@@ -49,8 +49,12 @@ The package includes the following data:
 Optionally, other data can be used instead of these provided files. The required formats are described in [the continuous outcome demo][continuous-jupyternotebook-link].
 
 The package includes the following processes:
-+ __Continuous outcomes:__ Each "patient" uses the population mRS probability distribution rather than being assigned a single mRS score. The average mRS score may be any number between 0 and 6, for example 1.2.
++ __Continuous outcomes:__ Each "patient" uses the average mRS across a population mRS probability distribution. The average mRS score may be any number between 0 and 6, for example 1.2.
 + __Discrete outcomes:__ Each patient is given a single mRS score out of the population mRS probability distribution. The score must be a whole number from 0 to 6.
+
+The following images summarise the differences between the methods:
+
+![Summary of continuous method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is the mean across the distribution.](docs/images/continuous_example.png) ![Summary of discrete method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is selected from whichever part of the distribution contains a fixed cumulative probability score.](docs/images/discrete_example.png)
 
 
 ## 📚 External resources
@@ -61,13 +65,10 @@ Each major aspect of the package has a __demonstration__ and a __documentation__
 
 A conda environment file, `environment.yml`, is provided in the GitHub repository for use with the demonstration Jupyter notebooks.
 
-__Continuous outcomes:__
-  + [![Jupyter Notebook][jupyternotebook-img]][continuous-jupyternotebook-link] [Demo][continuous-jupyternotebook-link] 
-  + [![Jupyter Notebook][jupyternotebook-img]][continuous-documentation-link] [Docs][continuous-documentation-link]
-
-__Discrete outcomes:__
-  + [![Jupyter Notebook][jupyternotebook-img]][discrete-jupyternotebook-link] [Demo][discrete-jupyternotebook-link] 
-  + [![Jupyter Notebook][jupyternotebook-img]][discrete-documentation-link] [Docs][discrete-documentation-link]
+| **Continuous outcomes** | **Discrete outcomes** | 
+|:---------------|:-------------|
+| [![Jupyter Notebook][jupyternotebook-img]][continuous-jupyternotebook-link] [Demo][continuous-jupyternotebook-link]  | [![Jupyter Notebook][jupyternotebook-img]][discrete-jupyternotebook-link] [Demo][discrete-jupyternotebook-link]  | 
+| [![Jupyter Notebook][jupyternotebook-img]][continuous-documentation-link] [Docs][continuous-documentation-link] | [![Jupyter Notebook][jupyternotebook-img]][discrete-documentation-link] [Docs][discrete-documentation-link] | 
 
 
 
