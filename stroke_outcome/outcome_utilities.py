@@ -1,10 +1,12 @@
 """
 Utilities for the stroke outcome package.
 
-Contents:
-+ import_mrs_dists_from_file
-+ import_utility_dists_from_file
-+ calculate_mrs_dist_at_treatment_time
+Functions for importing data, checking that the data holds sensible
+values, and generic combining and sorting of data.
+
+Also contains functions that are method-independent, for example the
+calculation of post-stroke mRS distributions which is the same for
+the continuous and discrete methods.
 """
 import pandas as pd
 import numpy as np
@@ -66,6 +68,12 @@ def import_utility_dists_from_file():
 
 
 def sanity_check_input_mrs_dists(mrs_dists):
+    """
+    Check that a mRS dists pandas DataFrame is legit.
+
+    Checks that all of the values in the DataFrame are numbers
+    and that each mRS distribution has a name.
+    """
     # ##### Checks for mRS dists #####
     # Check that everything in the mRS dist arrays is a number.
     # Check that the dtype of each column of data is int or float.
@@ -91,10 +99,12 @@ def sanity_check_mrs_dists_for_stroke_type(
         mt_chosen_bool
         ):
     """
-        # Sanity check the mRS distributions based on the stroke types:
-        # if a stroke type exists in the stroke_type_code data,
-        # check that the matching mRS distributions have been given.
-        # Also check by treatment type.
+    Check that all required mRS distributions have been given.
+
+    Sanity check the mRS distributions based on the stroke and treatment
+    types. If a stroke type and treatment type combination
+    exists in the stroke_type_code data,
+    check that the matching mRS distributions have been given.
     """
     nlvo_ivt_keys = [
         'pre_stroke_nlvo',
@@ -117,6 +127,7 @@ def sanity_check_mrs_dists_for_stroke_type(
         'no_effect_lvo_ivt_deaths',
         't0_treatment_lvo_ivt'
     ]
+    # Gather the list of keys that needs checking:
     keys_to_check = []
     if np.any((stroke_type_codes == 1) & (ivt_chosen_bool == 1)):
         # Check for nLVO data.
@@ -132,6 +143,9 @@ def sanity_check_mrs_dists_for_stroke_type(
         # "other" stroke types.
         pass
 
+    # Check whether all the required keys exist.
+    # If not, add the missing values to a string and
+    # at the end of the checks, print the error string.
     error_str = ''
     for key in keys_to_check:
         try:
@@ -147,10 +161,18 @@ def sanity_check_mrs_dists_for_stroke_type(
 
 
 def sanity_check_utility_weights(utility_weights):
+    """
+    Check the input utility weights and replace them if necessary.
+
+    Check that the input utility weights have seven values,
+    one for each mRS score. Flatten the array if necessary.
+    If the checks fail, use a set of default utility weights instead.
+    """
     if np.size(utility_weights) == 7:
         # Use ravel() to ensure array shape of (7, ).
         utility_weights = utility_weights.ravel()
     else:
+        # Use the Wang et al. 2020 values:
         utility_weights = np.array(
             [0.97, 0.88, 0.74, 0.55, 0.20, -0.19, 0.00])
         print(''.join([
@@ -163,6 +185,12 @@ def sanity_check_utility_weights(utility_weights):
 
 
 def sanity_check_trial_input_lengths(trial, number_of_patients):
+    """
+    Check that all user input arrays have the expected length.
+
+    The rest of the code assumes that all patient data arrays
+    have the same length, so if there's a problem then flag it up here.
+    """
     # Do an extra check that the number of patients is matched
     # by all arrays in case the value was updated after
     # initialisation.
@@ -198,6 +226,13 @@ def sanity_check_trial_input_lengths(trial, number_of_patients):
 
 
 def extract_mrs_probs_and_logodds(mrs_dists):
+    """
+    Make dictionaries of mRS probs and logodds from a pandas DataFrame.
+
+    The DataFrame must have seven columns, one for each mRS score,
+    each named mRS<={x} for the score x. There must also be an index
+    column for naming the dictionary keys.
+    """
     # Store modified Rankin Scale distributions as arrays in dictionary
     mrs_distribution_probs = dict()
     mrs_distribution_logodds = dict()
@@ -218,7 +253,11 @@ def assign_nlvo_with_mt_as_lvo(
         mt_chosen_bool
         ):
     """
-    comment me please
+    Find nLVO + MT patients and reassign them to LVO.
+
+    Check whether any patients have an nLVO and receive MT.
+    There are no probability distributions for that case.
+    So change those patients' stroke type to LVO.
     """
     number_of_patients_with_nlvo_and_mt = len((
         (stroke_type_code == 1) &
@@ -277,9 +316,29 @@ def calculate_post_stroke_mrs_dists_for_lvo_ivt(
         ivt_time_no_effect_mins
         ):
     """
+    Calculate post-stroke mRS dists for LVO treated with IVT.
+
     Wrapper for _calculate_probs_at_treatment_time() for LVO+IVT.
 
-    Calculate post-stroke mRS dists for LVO treated with IVT.
+    Inputs:
+    -------
+    mrs_distribution_probs   - dict. Each entry is array of 7 floats.
+                               Must contain the keys:
+                                 no_treatment_lvo
+                                 no_effect_lvo_ivt_deaths
+    mrs_distribution_logodds - dict. Each entry is array of 7 floats.
+                               Must contain the keys:
+                                 no_effect_lvo_ivt_deaths
+                                 t0_treatment_lvo_ivt
+    trial                    - dict. Trial dictionary from the outcome
+                               class (Discrete_outcome,
+                               Continuous_outcome).
+    ivt_time_no_effect_mins  - float. Time of no effect for IVT.
+
+    Returns:
+    --------
+    post_stroke_probs - x by 7 array. Post-stroke mRS distributions,
+                        one distribution per patient.
     """
     try:
         # Get relevant distributions
@@ -319,9 +378,29 @@ def calculate_post_stroke_mrs_dists_for_lvo_mt(
         mt_time_no_effect_mins
         ):
     """
+    Calculate post-stroke mRS dists for LVO treated with MT.
+
     Wrapper for _calculate_probs_at_treatment_time() for LVO+MT.
 
-    Calculate post-stroke mRS dists for LVO treated with MT.
+    Inputs:
+    -------
+    mrs_distribution_probs   - dict. Each entry is array of 7 floats.
+                               Must contain the keys:
+                                 no_treatment_lvo
+                                 no_effect_lvo_mt_deaths
+    mrs_distribution_logodds - dict. Each entry is array of 7 floats.
+                               Must contain the keys:
+                                 no_effect_lvo_mt_deaths
+                                 t0_treatment_lvo_mt
+    trial                    - dict. Trial dictionary from the outcome
+                               class (Discrete_outcome,
+                               Continuous_outcome).
+    mt_time_no_effect_mins  - float. Time of no effect for MT.
+
+    Returns:
+    --------
+    post_stroke_probs - x by 7 array. Post-stroke mRS distributions,
+                        one distribution per patient.
     """
     try:
         # Get relevant distributions
@@ -359,9 +438,29 @@ def calculate_post_stroke_mrs_dists_for_nlvo_ivt(
         ivt_time_no_effect_mins
         ):
     """
+    Calculate post-stroke mRS dists for nLVO treated with IVT.
+
     Wrapper for _calculate_probs_at_treatment_time() for nLVO+IVT.
 
-    Calculate post-stroke mRS dists for nLVO treated with IVT.
+    Inputs:
+    -------
+    mrs_distribution_probs   - dict. Each entry is array of 7 floats.
+                               Must contain the keys:
+                                 no_treatment_nlvo
+                                 no_effect_nlvo_ivt_deaths
+    mrs_distribution_logodds - dict. Each entry is array of 7 floats.
+                               Must contain the keys:
+                                 no_effect_nlvo_ivt_deaths
+                                 t0_treatment_nlvo_ivt
+    trial                    - dict. Trial dictionary from the outcome
+                               class (Discrete_outcome,
+                               Continuous_outcome).
+    ivt_time_no_effect_mins  - float. Time of no effect for IVT.
+
+    Returns:
+    --------
+    post_stroke_probs - x by 7 array. Post-stroke mRS distributions,
+                        one distribution per patient.
     """
     try:
         # Get relevant distributions
@@ -811,7 +910,7 @@ def _make_stats_df(stats_dicts, labels=['nLVO', 'LVO', 'Other']):
         ]
 
         label = labels[s]
-        cols_for_df += [label + c for c in cols_each_stroke_type]
+        cols_for_df += [label + ': ' + c for c in cols_each_stroke_type]
         data_for_df += [
             counts, props_of_this_stroke_type, props_of_full_cohort]
 

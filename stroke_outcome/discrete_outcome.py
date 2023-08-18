@@ -90,7 +90,7 @@ class Discrete_outcome:
     --------------------
 
     In addition to mRS we may calculate utility-weighted mRS. Utility is an
-    estimated quality of life (0=dead, 1=full quality of life, neagtive numbers
+    estimated quality of life (0=dead, 1=full quality of life, negative numbers
     indicate a 'worse than death' outcome).
 
     If not given explicitly, the following mRS utility scores are used.
@@ -141,6 +141,7 @@ class Discrete_outcome:
         discrete_outcome.trial['onset_to_needle_mins'].data = {array 1}
         discrete_outcome.trial['ivt_chosen_bool'].data = {array 2}
         discrete_outcome.trial['stroke_type_code'].data = {array 3}
+        discrete_outcome.trial['mrs_pre_stroke'].data = {array 3}
         # Calculate outcomes:
         results_by_stroke_type, full_cohort_outcomes = (
             discrete_outcome.calculate_outcomes())
@@ -148,6 +149,10 @@ class Discrete_outcome:
 
     Limitations and notes:
     ----------------------
+    When "x" scores are not provided, they are generated within the class
+    using np.random.uniform. This random element means that running the
+    same data twice will produce different results.
+
     For MT, there are only mRS probability distributions for patients with
     LVOs. If a patient with an nLVO is treated with MT, the patient details
     are quietly updated to reassign them as LVO and so use the base LVO
@@ -477,6 +482,19 @@ class Discrete_outcome:
     def calculate_outcomes_dict_for_lvo_ivt(self, post_stroke_probs):
         """
         Wrapper for _create_mrs_utility_dict() for LVO with IVT.
+
+        Inputs:
+        -------
+        post_stroke_probs - x by 7 ndarray.
+                            Previously-calculated mRS dists for all
+                            patients in the array post-stroke.
+                            The mRS dist of the nth patient is
+                            post_stroke_probs[n, :].
+
+        Returns:
+        --------
+        outcomes_dict - dict. Various useful mRS and utility scores
+                        for all patients in the input data.
         """
         try:
             # Get relevant distributions
@@ -500,6 +518,19 @@ class Discrete_outcome:
     def calculate_outcomes_dict_for_lvo_mt(self, post_stroke_probs):
         """
         Wrapper for _create_mrs_utility_dict() for LVO with MT.
+
+        Inputs:
+        -------
+        post_stroke_probs - x by 7 ndarray.
+                            Previously-calculated mRS dists for all
+                            patients in the array post-stroke.
+                            The mRS dist of the nth patient is
+                            post_stroke_probs[n, :].
+
+        Returns:
+        --------
+        outcomes_dict - dict. Various useful mRS and utility scores
+                        for all patients in the input data.
         """
         try:
             # Get relevant distributions
@@ -523,6 +554,19 @@ class Discrete_outcome:
     def calculate_outcomes_dict_for_nlvo_ivt(self, post_stroke_probs):
         """
         Wrapper for _create_mrs_utility_dict() for nLVO with IVT.
+
+        Inputs:
+        -------
+        post_stroke_probs - x by 7 ndarray.
+                            Previously-calculated mRS dists for all
+                            patients in the array post-stroke.
+                            The mRS dist of the nth patient is
+                            post_stroke_probs[n, :].
+
+        Returns:
+        --------
+        outcomes_dict - dict. Various useful mRS and utility scores
+                        for all patients in the input data.
         """
         try:
             # Get relevant distributions
@@ -558,7 +602,12 @@ class Discrete_outcome:
 
     def generate_cohort_x_from_mrs_scores(self):
         """
-        a comment
+        Generate x values for a set of pre-stroke mRS scores.
+
+        Treat the different stroke types separately as they have
+        different pre-stroke mRS distributions. For each pre-stroke mRS,
+        find the range of allowed values of x and generate an x score
+        in this range for each relevant patient.
         """
         # Calculate these separately for nLVO, LVO, and "other"
         # patient subgroups.
@@ -589,26 +638,37 @@ class Discrete_outcome:
 
     def assign_x_by_mrs_score_uniform(self, mrs_scores, mrs_dist):
         """
-        comments please
+        Convert mRS scores to x values by random uniform sampling.
+
+        Inputs:
+        mrs_scores - np.array. One mRS score per patient.
+        mrs_dist   - np.array. The mRS distribution to sample from.
+                     The dist should contain cumulative probabilities
+                     and begin with a leading 0.0 for mRS < 0.
+
+        Returns:
+        x_scores   - np.array. One "x" score per patient.
         """
+        # Initially set all "x" to Not A Number.
         x_scores = np.full(mrs_scores.size, np.NaN)
         for mRS in range(7):
-            # Which patients have this score?
-            inds_here = np.where(mrs_scores == mRS)
+            # Which patients have this mRS score?
+            inds_here = np.where(mrs_scores == mRS)[0]
             # What are the x values allowed to be?
             lower_bound = mrs_dist[mRS]
             upper_bound = mrs_dist[mRS + 1]
             # Randomly select some x values in this range:
             x_here = np.random.uniform(
-                low=lower_bound, high=upper_bound, size=len(inds_here[0]))
+                low=lower_bound, high=upper_bound, size=len(inds_here))
             # Store in the full group array:
             x_scores[inds_here] = x_here
         return x_scores
 
     def generate_cohort_mrs_scores_from_x(self):
         """
-        # The input "x" values have been updated.
-        # Use them to calculate an mRS score for each patient.
+        Convert the "x" scores to pre-stroke mRS scores.
+
+        This is used when "x" scores are not provided by the user.
         """
         # Calculate these separately for nLVO, LVO, and "other"
         # patient subgroups.
@@ -635,12 +695,20 @@ class Discrete_outcome:
         # initial mRS value set above (0).
         return mRS_scores_full_cohort
 
-    def find_mrs_score_from_x(self, x, mRS_dist):
+    def find_mrs_score_from_x(self, x, mrs_dist):
         """
-        Comment me! What are the mRS bin requirements?
+        Convert an x score to mRS score using an mRS distribution.
+
+        Inputs:
+        -------
+        x        - float or array. One x score per patient.
+        mrs_dist - array. mRS cumulative probability distribution to
+                   sample from. It should begin with a leading zero.
+
+        Returns:
+        float or array. One mRS score per patient.
         """
-        mRS = np.digitize(x, mRS_dist).astype(float)
-        return mRS
+        return np.digitize(x, mrs_dist).astype(float)
 
     """
     ##############################
@@ -676,9 +744,10 @@ class Discrete_outcome:
                             post_stroke_probs[n, :].
         not_treated_probs - 1 by 7 array. mRS dist for
                             the patients who receive no treatment.
-
-        treatment_chosen_bool - array of x bools. Whether each patient
-                                received this treatment.
+        x_each_patient    - array of x floats. The x scores for all
+                            patients.
+        mask_treated      - array of x bools. Whether each patient
+                            received this treatment.
 
         Returns:
         --------
@@ -708,12 +777,6 @@ class Discrete_outcome:
         - proportion_of_valid_patients_who_improved
         - proportion_of_treated_patients_who_improved
         """
-        # Convert cumulative mRS to non-cumulative:
-        # not_treated_noncum_dist = np.diff(np.append(0.0, not_treated_probs))
-        # post_stroke_noncum_dist = np.diff(np.concatenate(
-        #     (np.zeros((post_stroke_probs.shape[0], 1)), post_stroke_probs),
-        #     axis=1))
-
         # Pick out which patients are valid (i.e. no NaN):
         inds_valid = np.where(~np.isnan(post_stroke_probs[:, 0]))[0]
         inds_invalid = np.where(np.isnan(post_stroke_probs[:, 0]))[0]
