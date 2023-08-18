@@ -65,10 +65,10 @@ Each major aspect of the package has a __demonstration__ and a __documentation__
 
 A conda environment file, `environment.yml`, is provided in the GitHub repository for use with the demonstration Jupyter notebooks.
 
-| **Continuous outcomes** | **Discrete outcomes** | 
-|:---------------|:-------------|
-| [![Jupyter Notebook][jupyternotebook-img]][continuous-jupyternotebook-link] [Demo][continuous-jupyternotebook-link]  | [![Jupyter Notebook][jupyternotebook-img]][discrete-jupyternotebook-link] [Demo][discrete-jupyternotebook-link]  | 
-| [![Jupyter Notebook][jupyternotebook-img]][continuous-documentation-link] [Docs][continuous-documentation-link] | [![Jupyter Notebook][jupyternotebook-img]][discrete-documentation-link] [Docs][discrete-documentation-link] | 
+| | **Continuous outcomes** | **Discrete outcomes** | 
+|:--|:---------------|:-------------|
+| Demo | [![Jupyter Notebook][jupyternotebook-img]][continuous-jupyternotebook-link]  | [![Jupyter Notebook][jupyternotebook-img]][discrete-jupyternotebook-link]  | 
+| Docs | [![Jupyter Notebook][jupyternotebook-img]][continuous-documentation-link] | [![Jupyter Notebook][jupyternotebook-img]][discrete-documentation-link] | 
 
 
 
