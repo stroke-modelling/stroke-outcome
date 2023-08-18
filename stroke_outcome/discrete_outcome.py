@@ -684,8 +684,10 @@ class Discrete_outcome:
         - each_patient_mrs_shift
         - each_patient_utility_shift
         - valid_patients_mean_mrs_post_stroke
+        - valid_patients_mean_mrs_not_treated
         - valid_patients_mean_mrs_shift
         - valid_patients_mean_utility_post_stroke
+        - valid_patients_mean_utility_not_treated
         - valid_patients_mean_utility_shift
         - treated_patients_mean_mrs_post_stroke
         - treated_patients_mean_mrs_shift
