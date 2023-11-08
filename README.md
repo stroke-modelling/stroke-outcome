@@ -54,7 +54,7 @@ The package includes the following processes:
 
 The following images summarise the differences between the methods:
 
-![Summary of continuous method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is the mean across the distribution.](docs/images/continuous_example.png) ![Summary of discrete method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is selected from whichever part of the distribution contains a fixed cumulative probability score.](docs/images/discrete_example.png)
+![Summary of continuous method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is the mean across the distribution.](https://github.com/stroke-modelling/stroke-outcome/tree/main/docs/images/continuous_example.png) ![Summary of discrete method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is selected from whichever part of the distribution contains a fixed cumulative probability score.](https://github.com/stroke-modelling/stroke-outcome/tree/main/docs/images/discrete_example.png)
 
 
 ## 📚 External resources
