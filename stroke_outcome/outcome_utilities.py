@@ -13,6 +13,8 @@ import numpy as np
 from importlib_resources import files
 import numpy.typing as npt  # For type hinting.
 
+from .evaluated_array import Evaluated_array
+
 
 def import_mrs_dists_from_file():
     """Import cumulative mRS distributions as pandas DataFrame."""
@@ -66,6 +68,22 @@ def import_utility_dists_from_file():
         skiprows=n_lines_header  # Avoid the header.
         )
     return utility_dists, utility_dists_notes
+
+
+def assign_patient_data(
+        data_df: pd.DataFrame,
+        trial: dict
+        ):
+    """
+
+    # Assume that this input dataframe has column names that
+    # match keys in the trial dictionary.
+    """
+    for key in list(trial.keys()):
+        if key in data_df.columns:
+            trial[key].data = data_df[key].values
+
+    return trial
 
 
 def sanity_check_input_mrs_dists(mrs_dists: pd.DataFrame):
@@ -171,59 +189,68 @@ def sanity_check_utility_weights(utility_weights: npt.ArrayLike):
     """
     if np.size(utility_weights) == 7:
         # Use ravel() to ensure array shape of (7, ).
-        utility_weights = utility_weights.ravel()
-    else:
-        # Use the Wang et al. 2020 values:
-        utility_weights = np.array(
-            [0.97, 0.88, 0.74, 0.55, 0.20, -0.19, 0.00])
+        return utility_weights.ravel()
+
+    utility_weights_default = np.array(
+        [0.97, 0.88, 0.74, 0.55, 0.20, -0.19, 0.00])
+
+    if len(utility_weights) > 0:
+        # i.e. if this isn't the default blank list:
         print(''.join([
             'Problem with the input utility weights. ',
             'Expected one weight per mRS score from 0 to 6. ',
             'Setting self.utility_weights to default values: ',
-            f'{utility_weights}'
+            f'{utility_weights_default}'
             ]))
-    return utility_weights
+
+    # Use the Wang et al. 2020 values:
+    return utility_weights_default
 
 
-def sanity_check_trial_input_lengths(trial: dict, number_of_patients: int):
-    """
-    Check that all user input arrays have the expected length.
+# def sanity_check_trial_input_lengths(trial: dict, number_of_patients: int):
+#     """
+#     Check that all user input arrays have the expected length.
 
-    The rest of the code assumes that all patient data arrays
-    have the same length, so if there's a problem then flag it up here.
-    """
-    # Do an extra check that the number of patients is matched
-    # by all arrays in case the value was updated after
-    # initialisation.
-    patient_array_labels = [
-        'stroke type (code)',
-        'time to IVT (mins)',
-        'received IVT (bool)',
-        'time to MT (mins)',
-        'received MT (bool)',
-        'IVT no effect (bool)',
-        'MT no effect (bool)'
-    ]
-    patient_array_vars = [
-        trial['stroke_type_code'].data,
-        trial['onset_to_needle_mins'].data,
-        trial['ivt_chosen_bool'].data,
-        trial['onset_to_puncture_mins'].data,
-        trial['mt_chosen_bool'].data,
-        trial['ivt_no_effect_bool'].data,
-        trial['mt_no_effect_bool'].data
-        ]
-    length_warning_str = ''.join([
-        'The following patient data arrays contain a different number ',
-        'of patients than the instance value of ',
-        f'{number_of_patients}:',
-        '\n'
-        ])
-    for (val, key) in zip(patient_array_vars, patient_array_labels):
-        if len(val) != number_of_patients:
-            print(length_warning_str + '- ' + key +
-                  f', length {len(val)}')
-            length_warning_str = ''
+#     The rest of the code assumes that all patient data arrays
+#     have the same length, so if there's a problem then flag it up here.
+#     """
+#     # Do an extra check that the number of patients is matched
+#     # by all arrays in case the value was updated after
+#     # initialisation.
+#     patient_array_labels = [
+#         'stroke type (code)',
+#         'time to IVT (mins)',
+#         'received IVT (bool)',
+#         'time to MT (mins)',
+#         'received MT (bool)',
+#         'IVT no effect (bool)',
+#         'MT no effect (bool)'
+#     ]
+#     patient_array_vars = [
+#         trial['stroke_type_code'].data,
+#         trial['onset_to_needle_mins'].data,
+#         trial['ivt_chosen_bool'].data,
+#         trial['onset_to_puncture_mins'].data,
+#         trial['mt_chosen_bool'].data,
+#         trial['ivt_no_effect_bool'].data,
+#         trial['mt_no_effect_bool'].data
+#         ]
+#     length_warning_str = ''.join([
+#         'The following patient data arrays contain a different number ',
+#         'of patients than the instance value of ',
+#         f'{number_of_patients}:',
+#         '\n'
+#         ])
+#     for (val, key) in zip(patient_array_vars, patient_array_labels):
+#         if len(val) != number_of_patients:
+#             print(length_warning_str + '- ' + key +
+#                   f', length {len(val)}')
+#             length_warning_str = ''
+
+#     # #############################################################################################
+#     # change this to check the length fo each list,
+#     # store it, check all are the same,
+#     # and then set taht to be the number of patients in the trial.
 
 
 def extract_mrs_probs_and_logodds(mrs_dists: pd.DataFrame):
@@ -406,10 +433,10 @@ def calculate_post_stroke_mrs_dists_for_lvo_mt(
     try:
         # Get relevant distributions
         not_treated_probs = mrs_distribution_probs['no_treatment_lvo']
-        no_effect_probs = \
-            mrs_distribution_probs['no_effect_lvo_mt_deaths']
+        no_effect_probs = mrs_distribution_probs[
+            'no_effect_lvo_mt_deaths']
         no_effect_logodds = mrs_distribution_logodds[
-                'no_effect_lvo_mt_deaths']
+            'no_effect_lvo_mt_deaths']
         t0_logodds = mrs_distribution_logodds['t0_treatment_lvo_mt']
     except KeyError:
         raise KeyError(
@@ -816,36 +843,30 @@ def _make_stats_dict(trial: dict, stroke_type_code: int):
         prop_mt_no_effect_of_total = np.NaN
         prop_no_treatment_of_total = np.NaN
 
-    # Add all of this to the dictionary:
-    stats_dict = dict()
+    # Add all of this to the dictionary "sd":
+    sd = dict()
     # Numbers:
-    stats_dict['n_stroke_type'] = n_stroke_type
-    stats_dict['n_total'] = n_total
-    stats_dict['n_ivt'] = n_ivt
-    stats_dict['n_mt'] = n_mt
-    stats_dict['n_ivt_no_effect'] = n_ivt_no_effect
-    stats_dict['n_mt_no_effect'] = n_mt_no_effect
-    stats_dict['n_no_treatment'] = n_no_treatment
+    sd['n_stroke_type'] = n_stroke_type
+    sd['n_total'] = n_total
+    sd['n_ivt'] = n_ivt
+    sd['n_mt'] = n_mt
+    sd['n_ivt_no_effect'] = n_ivt_no_effect
+    sd['n_mt_no_effect'] = n_mt_no_effect
+    sd['n_no_treatment'] = n_no_treatment
     # Proportions:
-    stats_dict['prop_stroke_type'] = prop_stroke_type
-    stats_dict['prop_ivt_of_stroke_type'] = prop_ivt_of_stroke_type
-    stats_dict['prop_ivt_of_total'] = prop_ivt_of_total
-    stats_dict['prop_mt_of_stroke_type'] = prop_mt_of_stroke_type
-    stats_dict['prop_mt_of_total'] = prop_mt_of_total
-    stats_dict['prop_ivt_no_effect_of_stroke_type'] = \
-        prop_ivt_no_effect_of_stroke_type
-    stats_dict['prop_ivt_no_effect_of_total'] = \
-        prop_ivt_no_effect_of_total
-    stats_dict['prop_mt_no_effect_of_stroke_type'] = \
-        prop_mt_no_effect_of_stroke_type
-    stats_dict['prop_mt_no_effect_of_total'] = \
-        prop_mt_no_effect_of_total
-    stats_dict['prop_no_treatment_of_stroke_type'] = \
-        prop_no_treatment_of_stroke_type
-    stats_dict['prop_no_treatment_of_total'] = \
-        prop_no_treatment_of_total
+    sd['prop_stroke_type'] = prop_stroke_type
+    sd['prop_ivt_of_stroke_type'] = prop_ivt_of_stroke_type
+    sd['prop_ivt_of_total'] = prop_ivt_of_total
+    sd['prop_mt_of_stroke_type'] = prop_mt_of_stroke_type
+    sd['prop_mt_of_total'] = prop_mt_of_total
+    sd['prop_ivt_no_effect_of_stroke_type'] = prop_ivt_no_effect_of_stroke_type
+    sd['prop_ivt_no_effect_of_total'] = prop_ivt_no_effect_of_total
+    sd['prop_mt_no_effect_of_stroke_type'] = prop_mt_no_effect_of_stroke_type
+    sd['prop_mt_no_effect_of_total'] = prop_mt_no_effect_of_total
+    sd['prop_no_treatment_of_stroke_type'] = prop_no_treatment_of_stroke_type
+    sd['prop_no_treatment_of_total'] = prop_no_treatment_of_total
 
-    return stats_dict
+    return sd
 
 
 def _make_stats_df(

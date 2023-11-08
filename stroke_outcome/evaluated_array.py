@@ -151,47 +151,68 @@ class Evaluated_array:
         sanity_checks_passed = True
         # Don't raise exceptions as this function goes along to ensure
         # that all of the error messages are flagged up on the first
-        # run through.
+        # run through. Place error messages in here:
+        failed_str = (
+            f'{self._name}: Sanity checks failed. Values not updated.'
+            )
 
         # Are all values the right dtype?
         if arr.dtype not in [
                 np.dtype(valid_dtype) for valid_dtype in self._valid_dtypes
                 ]:
-            print(''.join([
-                'All values in the array must be the same dtype. ',
-                f'Available types are: {self._valid_dtypes}.'
-                ]))
-            sanity_checks_passed = False
+            if ('int' in self._valid_dtypes) & (arr.dtype == float):
+                # Check specifically whether floats have been given
+                # instead of integers.
+                if np.all(arr == arr.astype(int)):
+                    # Quietly allow this case by converting float to
+                    # integers.
+                    arr = arr.astype(int)
+                else:
+                    sanity_checks_passed = False
+            elif ('float' in self._valid_dtypes) & (arr.dtype == int):
+                # Check whether integers have been given instead of floats.
+                if np.all(arr == arr.astype(float)):
+                    # Quietly allow this case by converting float to
+                    # integers.
+                    arr = arr.astype(float)
+                else:
+                    sanity_checks_passed = False
+            else:
+                sanity_checks_passed = False
+        if sanity_checks_passed is False:
+            failed_str += ''.join([
+                # ' All values in the array must be the same dtype. ',
+                f' Available data types are: {self._valid_dtypes}.'
+                ])
 
         # Are all values within the allowed range?
         if self._valid_min is not None and self._valid_max is not None:
             if np.all(
                     (arr >= self._valid_min) & (arr <= self._valid_max)
                     ) is False:
-                print('Some values are outside the allowed range.')
+                failed_str += ' Some values are outside the allowed range.'
                 sanity_checks_passed = False
 
         # Is the array one-dimensional?
         if len(arr.shape) > 1:
-            print(''.join([
-                f'Flattening the input array from shape {arr.shape} to ',
+            failed_str += ''.join([
+                f' Flattening the input array from shape {arr.shape} to ',
                 f'shape {arr.ravel().shape}.'
-                ]))
+                ])
             arr = arr.ravel()
             # This doesn't fail the sanity check.
 
         # Does the array contain the right number of entries?
         if len(arr) != self._length:
-            print(''.join([
-                f'This array contains {len(arr)} values ',
+            failed_str += ''.join([
+                f' This array contains {len(arr)} values ',
                 'but the expected length is ',
                 f'{self._length}. ',
                 'Please update the arrays to be the same length.'
-                ]))
+                ])
             sanity_checks_passed = False
 
         # If any of the checks failed, raise exception now.
         if sanity_checks_passed is False:
-            failed_str = 'Sanity checks failed. Values not updated.'
             raise ValueError(failed_str) from None
             # ^ this syntax prevents longer message printing.

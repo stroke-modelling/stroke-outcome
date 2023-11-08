@@ -178,7 +178,7 @@ class Discrete_outcome:
     def __init__(
             self,
             mrs_dists: pd.DataFrame,
-            number_of_patients: int,
+            # number_of_patients: int,
             utility_weights: npt.ArrayLike = np.array([]),
             ivt_time_no_effect_mins: float = 378.0,
             mt_time_no_effect_mins: float = 480.0
@@ -237,29 +237,9 @@ class Discrete_outcome:
         #
         # ##### Patient data setup #####
         # All arrays must contain this many values:
-        self.number_of_patients = number_of_patients
+        # self.number_of_patients = number_of_patients
 
-        # Evaluated_array(
-        #    number_of_patients, valid_dtypes_list, valid_min, valid_max)
-        n = self.number_of_patients  # Defined to shorten the following.
-        self.trial = dict(
-            stroke_type_code=Evaluated_array(n, ['int'], 0, 2),
-            onset_to_needle_mins=Evaluated_array(n, ['float'], 0.0, np.inf),
-            ivt_chosen_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-            ivt_no_effect_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-            onset_to_puncture_mins=Evaluated_array(
-                n, ['float'], 0.0, np.inf),
-            mt_chosen_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-            mt_no_effect_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-            mrs_pre_stroke=Evaluated_array(n, ['int', 'float'], 0, 6),
-            x_pre_stroke=Evaluated_array(n, ['float'], 0.0, 1.0),
-        )
 
-        # Immediately overwrite the values of "x" pre-stroke
-        # so that later we can check whether "x" has been updated
-        # by the user. Set all values to something unlikely to happen
-        # by chance or by manual user input:
-        self.trial['x_pre_stroke'].data = np.full(n, np.e / np.pi)
 
     def __str__(self):
         """Prints info when print(Instance) is called."""
@@ -323,6 +303,93 @@ class Discrete_outcome:
             ])
 
     """
+    ########################
+    ##### DATA STORAGE #####
+    ########################
+
+    These functions set up where the data will be stored.
+    """
+    def create_new_blank_trial_dict(self, n):
+        """
+        Different outcome models have different dictionary contents
+        so can't use a shared utility here.
+
+        n - int. number of patients.
+        """
+        # Evaluated_array(
+        #    number_of_patients, valid_dtypes_list, valid_min, valid_max, name)
+        trial = dict(
+            stroke_type_code=Evaluated_array(
+                n, ['int'], 0, 2, 'stroke type code'),
+            onset_to_needle_mins=Evaluated_array(
+                n, ['float'], 0.0, np.inf, 'onset to needle (mins)'),
+            ivt_chosen_bool=Evaluated_array(
+                n, ['int', 'bool'], 0, 1, 'ivt chosen'),
+            ivt_no_effect_bool=Evaluated_array(
+                n, ['int', 'bool'], 0, 1, 'ivt no effect'),
+            onset_to_puncture_mins=Evaluated_array(
+                n, ['float'], 0.0, np.inf, 'onset to puncture (mins)'),
+            mt_chosen_bool=Evaluated_array(
+                n, ['int', 'bool'], 0, 1, 'mt chosen'),
+            mt_no_effect_bool=Evaluated_array(
+                n, ['int', 'bool'], 0, 1, 'mt no effect'),
+            mrs_pre_stroke=Evaluated_array(
+                n, ['int', 'float'], 0, 6, 'mrs pre-stroke'),
+            x_pre_stroke=Evaluated_array(
+                n, ['float'], 0.0, 1.0, '"x" pre-stroke'),
+        )
+
+        # Immediately overwrite the values of "x" pre-stroke
+        # so that later we can check whether "x" has been updated
+        # by the user. Set all values to something unlikely to happen
+        # by chance or by manual user input:
+        trial['x_pre_stroke'].data = np.full(n, np.e / np.pi)
+        return trial
+
+
+    def check_trial_dict_for_new_data(self, data_df):
+        """
+        check trial dict, see if needs updating,then apply data
+        """
+
+        # Number of patients in this new data:
+        n = len(data_df)
+
+        try:
+            trial = self.trial
+            make_new_trial_dict = False
+
+            # Number of patients in existing trial dictionary:
+            nt = len(list(trial.values())[0].data)
+
+            # If function run again with a different number of patients,
+            # delete the existing trial dict and create a new one?
+            # Should at least give a warning in case it's accidental. ???????????????????????????????/
+            make_new_trial_dict = True if n != nt else False
+
+        except: # check error name
+            make_new_trial_dict = True
+
+        # Need to pass through the trial dictionary somehow.
+        # try except because it might not yet have been created??
+
+        if make_new_trial_dict:
+            trial = self.create_new_blank_trial_dict(n)
+            # Save to self:
+            self.trial = trial
+
+
+    def assign_patients_to_trial(self, data_df):
+        """
+        ?
+        """
+        self.check_trial_dict_for_new_data(data_df)
+
+        trial = ou.assign_patient_data(data_df, self.trial)
+
+        self.trial = trial
+
+    """
     ################
     ##### MAIN #####
     ################
@@ -369,8 +436,8 @@ class Discrete_outcome:
         - proportion_improved                                   1 float
         """
         # ##### Sanity checks #####
-        ou.sanity_check_trial_input_lengths(
-            self.trial, self.number_of_patients)
+        # ou.sanity_check_trial_input_lengths(
+        #     self.trial, self.number_of_patients)
 
         # Check if anyone has an nLVO and receives MT
         # (for which we don't have mRS probability distributions)
