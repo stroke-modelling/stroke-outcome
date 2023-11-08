@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import numpy.typing as npt  # For type hinting.
+import warnings
 
 from .evaluated_array import Evaluated_array
 import stroke_outcome.outcome_utilities as ou
@@ -26,7 +27,6 @@ class Discrete_outcome:
       6) LVO treated with IVT at time of no-effect (includes treatment deaths)
       7) LVO treated at t=0 (time of stroke onset) with IVT
       8) LVO treated with IVT at time of no-effect (includes treatment deaths)
-    number_of_patients      - int. The number of patients in the array.
     utility_weights         - np.array. The utility weight for each mRS
                               score. Contains seven values.
     ivt_time_no_effect_mins - float. Time of no effect for
@@ -136,8 +136,7 @@ class Discrete_outcome:
     Then run the main calculate_outcomes() function.
     Example:
         # Initiate the object:
-        discrete_outcome = Discrete_outcome(
-            mrs_dists={pandas dataframe}, number_of_patients=100)
+        discrete_outcome = Discrete_outcome(mrs_dists={pandas dataframe})
         # Import patient data:
         discrete_outcome.trial['onset_to_needle_mins'].data = {array 1}
         discrete_outcome.trial['ivt_chosen_bool'].data = {array 2}
@@ -150,7 +149,7 @@ class Discrete_outcome:
 
     Limitations and notes:
     ----------------------
-    When "x" scores are not provided, they are generated within the class
+    When fixed probabilities are not provided, they are generated
     using np.random.uniform. This random element means that running the
     same data twice will produce different results.
 
@@ -177,8 +176,7 @@ class Discrete_outcome:
 
     def __init__(
             self,
-            mrs_dists: pd.DataFrame,
-            # number_of_patients: int,
+            mrs_dists: pd.DataFrame = pd.DataFrame(),
             utility_weights: npt.ArrayLike = np.array([]),
             ivt_time_no_effect_mins: float = 378.0,
             mt_time_no_effect_mins: float = 480.0
@@ -217,7 +215,9 @@ class Discrete_outcome:
         """
         self.name = "Discrete clinical outcome model"
 
-        ou.sanity_check_input_mrs_dists(mrs_dists)
+        # Use either the user input "mrs_dists" or load them from
+        # file if none were provided. Check that it all makes sense:
+        mrs_dists = ou.sanity_check_input_mrs_dists(mrs_dists)
         # Store the input for the repr() string.
         self.mrs_dists_input = mrs_dists
 
@@ -234,19 +234,9 @@ class Discrete_outcome:
         # Store utility weightings for mRS 0-6
         self.utility_weights = ou.sanity_check_utility_weights(utility_weights)
 
-        #
-        # ##### Patient data setup #####
-        # All arrays must contain this many values:
-        # self.number_of_patients = number_of_patients
-
-
-
     def __str__(self):
         """Prints info when print(Instance) is called."""
-        print_str = ''.join([
-            f'There are {self.number_of_patients} patients ',
-            'and the base mRS distributions are: ',
-        ])
+        print_str = 'The base mRS distributions are: '
         for (key, val) in zip(
                 self.mrs_distribution_probs.keys(),
                 self.mrs_distribution_probs.values()
@@ -270,9 +260,10 @@ class Discrete_outcome:
             '... using the syntax: \n',
             '    trial[{key}].data = {array}\n',
             'In addition, either of the following arrays should be ',
-            'provided. If both are provided, the "x" array is used.\n',
+            'provided. If both are provided, the fixed probability array ',
+            'is used.\n',
             '- mrs_pre_stroke\n',
-            '- x_pre_stroke\n',
+            '- fixed_prob_pre_stroke\n',
             ])
 
         print_str += ''.join([
@@ -289,9 +280,8 @@ class Discrete_outcome:
         # characters, but it's the best way I can think of to display
         # the input dataframe in full.
         return ''.join([
-            'Continous_outcome(',
+            'Discrete_outcome(',
             f'mrs_dists=DATAFRAME*, '
-            f'number_of_patients={self.number_of_patients}',
             f'utility_weights={self.utility_weights}',
             f'ivt_time_no_effect_mins={self.ivt_time_no_effect_mins}',
             f'mt_time_no_effect_mins={self.mt_time_no_effect_mins})',
@@ -309,15 +299,26 @@ class Discrete_outcome:
 
     These functions set up where the data will be stored.
     """
-    def create_new_blank_trial_dict(self, n):
+    def _create_new_blank_trial_dict(self, n: int):
         """
-        Different outcome models have different dictionary contents
-        so can't use a shared utility here.
+        Create a new trial dictionary for this model type.
 
+        By default, the dictionary contents are arrays of length "n"
+        and all placeholder values of zero in the required data type.
+        The dictionary contents are defined here but the method
+        to update them is assign_patient_data() in outcome_utilities.
+
+        Inputs:
+        -------
         n - int. number of patients.
+
+        Returns:
+        --------
+        trial - dict. The dictionary with placeholder data.
         """
-        # Evaluated_array(
-        #    number_of_patients, valid_dtypes_list, valid_min, valid_max, name)
+        # Each placeholder array has the format:
+        # Evaluated_array(number_of_patients, valid_dtypes_list,
+        #                 valid_min, valid_max, name)
         trial = dict(
             stroke_type_code=Evaluated_array(
                 n, ['int'], 0, 2, 'stroke type code'),
@@ -335,21 +336,32 @@ class Discrete_outcome:
                 n, ['int', 'bool'], 0, 1, 'mt no effect'),
             mrs_pre_stroke=Evaluated_array(
                 n, ['int', 'float'], 0, 6, 'mrs pre-stroke'),
-            x_pre_stroke=Evaluated_array(
-                n, ['float'], 0.0, 1.0, '"x" pre-stroke'),
+            fixed_prob_pre_stroke=Evaluated_array(
+                n, ['float'], 0.0, 1.0, 'x pre-stroke'),
         )
 
-        # Immediately overwrite the values of "x" pre-stroke
-        # so that later we can check whether "x" has been updated
+        # Immediately overwrite the values of fixed probability pre-stroke
+        # so that later we can check whether fixed probability has been updated
         # by the user. Set all values to something unlikely to happen
         # by chance or by manual user input:
-        trial['x_pre_stroke'].data = np.full(n, np.e / np.pi)
+        trial['fixed_prob_pre_stroke'].data = np.full(n, np.e / np.pi)
         return trial
 
-
-    def check_trial_dict_for_new_data(self, data_df):
+    def _check_trial_dict_for_new_data(self, data_df: pd.DataFrame):
         """
-        check trial dict, see if needs updating,then apply data
+        Updates self.trial dictionary with patient data.
+
+        If there is an existing self.trial dictionary and each entry
+        contains data for the same number of patients as in the input
+        data_df, then the existing dictionary is updated. Otherwise
+        a new trial dictionary is created.
+
+        Inputs:
+        -------
+        data_df - pd.DataFrame. Dataframe containing the patient data.
+                  This should have some columns with names matching the
+                  keys of self.trial dictionary. To see those keys,
+                  look at _create_new_blank_trial_dict().
         """
 
         # Number of patients in this new data:
@@ -359,34 +371,48 @@ class Discrete_outcome:
             trial = self.trial
             make_new_trial_dict = False
 
+            # Sanity check:
             # Number of patients in existing trial dictionary:
             nt = len(list(trial.values())[0].data)
-
-            # If function run again with a different number of patients,
-            # delete the existing trial dict and create a new one?
-            # Should at least give a warning in case it's accidental. ???????????????????????????????/
-            make_new_trial_dict = True if n != nt else False
-
-        except: # check error name
+            # If the numbers of patients do not match...
+            if n != nt:
+                # ... create a new trial dictionary for the new
+                # number of patients.
+                make_new_trial_dict = True
+                # Print a warning in case this was accidental.
+                warning_message = ''.join([
+                    'Previous patient data has been deleted because this ',
+                    'new data has a different number of patients.'
+                    ])
+                warnings.warn(warning_message)
+        except AttributeError:
+            # self.trial does not exist, so make a new trial dict:
             make_new_trial_dict = True
 
-        # Need to pass through the trial dictionary somehow.
-        # try except because it might not yet have been created??
-
         if make_new_trial_dict:
-            trial = self.create_new_blank_trial_dict(n)
+            trial = self._create_new_blank_trial_dict(n)
             # Save to self:
             self.trial = trial
 
-
-    def assign_patients_to_trial(self, data_df):
+    def assign_patients_to_trial(self, data_df: pd.DataFrame):
         """
-        ?
-        """
-        self.check_trial_dict_for_new_data(data_df)
+        Prepare input data for use in the model.
 
+        Inputs:
+        -------
+        data_df - pd.DataFrame. Contains the patient data. Any column
+                  with a name that matches a key in the trial dict
+                  will be used to update the trial dictionary.
+        """
+        # Check if an existing self.trial object is compatible with the
+        # input data, and if not then create a new self.trial dict.
+        self._check_trial_dict_for_new_data(data_df)
+
+        # Copy over applicable parts of the patient data to update
+        # the trial dictionary:
         trial = ou.assign_patient_data(data_df, self.trial)
 
+        # Store the updated trial dictionary in self:
         self.trial = trial
 
     """
@@ -436,9 +462,6 @@ class Discrete_outcome:
         - proportion_improved                                   1 float
         """
         # ##### Sanity checks #####
-        # ou.sanity_check_trial_input_lengths(
-        #     self.trial, self.number_of_patients)
-
         # Check if anyone has an nLVO and receives MT
         # (for which we don't have mRS probability distributions)
         self.trial['stroke_type_code'].data = (
@@ -472,19 +495,21 @@ class Discrete_outcome:
                 ))
 
         # Pre-stroke mRS score
-        # Check whether the "x" values have been given by the user.
+        # Check whether the fixed probabilities have been given by the user.
         # If so, calculate the pre-stroke mRS scores.
-        # If not, generate some "x" values from the given pre-stroke
+        # If not, generate some fixed probabilities from the given pre-stroke
         # mRS scores.
-        # n.b. on init, all x_pre_stroke was set to this fixed value.
-        if ~np.all(self.trial['x_pre_stroke'].data == (np.e / np.pi)):
-            # x has been given, so calculate pre-stroke mRS:
+        # n.b. on init, all fixed_prob_pre_stroke was set to this fixed value.
+        if ~np.all(self.trial['fixed_prob_pre_stroke'].data == (np.e / np.pi)):
+            # Fixed probability has been given,
+            # so calculate pre-stroke mRS:
             self.trial['mrs_pre_stroke'].data = (
-                self.generate_cohort_mrs_scores_from_x())
+                self.generate_cohort_mrs_scores_from_fixed_probs())
         else:
-            # x has not been given, so generate it from pre-stroke mRS:
-            self.trial['x_pre_stroke'].data = (
-                self.generate_cohort_x_from_mrs_scores())
+            # Fixed probability has not been given,
+            # so generate it from pre-stroke mRS:
+            self.trial['fixed_prob_pre_stroke'].data = (
+                self.generate_cohort_fixed_prob_from_mrs_scores())
 
         # ##### Statistics #####
         # Function to create a dataframe of patient statistics
@@ -574,12 +599,12 @@ class Discrete_outcome:
                 'Need to create LVO mRS distributions first.')
 
         treatment_chosen_bool = self.trial['ivt_chosen_bool'].data == 1
-        x_each_patient = self.trial['x_pre_stroke'].data
+        fixed_prob_each_patient = self.trial['fixed_prob_pre_stroke'].data
 
         outcomes_dict = self._create_mrs_utility_dict(
             post_stroke_probs,
             not_treated_probs,
-            x_each_patient,
+            fixed_prob_each_patient,
             treatment_chosen_bool
             )
         return outcomes_dict
@@ -611,12 +636,12 @@ class Discrete_outcome:
                 'Need to create LVO mRS distributions first.')
 
         treatment_chosen_bool = self.trial['mt_chosen_bool'].data == 1
-        x_each_patient = self.trial['x_pre_stroke'].data
+        fixed_prob_each_patient = self.trial['fixed_prob_pre_stroke'].data
 
         outcomes_dict = self._create_mrs_utility_dict(
             post_stroke_probs,
             not_treated_probs,
-            x_each_patient,
+            fixed_prob_each_patient,
             treatment_chosen_bool
             )
         return outcomes_dict
@@ -648,37 +673,34 @@ class Discrete_outcome:
                 'Need to create nLVO mRS distributions first.')
 
         treatment_chosen_bool = self.trial['ivt_chosen_bool'].data == 1
-        x_each_patient = self.trial['x_pre_stroke'].data
+        fixed_prob_each_patient = self.trial['fixed_prob_pre_stroke'].data
 
         outcomes_dict = self._create_mrs_utility_dict(
             post_stroke_probs,
             not_treated_probs,
-            x_each_patient,
+            fixed_prob_each_patient,
             treatment_chosen_bool
             )
         return outcomes_dict
 
     """
-    ###############################
-    ##### LINK mRS SCORE TO X #####
-    ###############################
+    ###############################################
+    ##### LINK mRS SCORE TO FIXED PROBABILITY #####
+    ###############################################
 
     The following functions link a patient's mRS score with the
-    value of "x" used in the calculations.
-
-    To do - rename "x" to "time-independent cumulative probability score"... or something
-    less hideous! ########################################################################################
-    fixed score?
+    value of fixed probability used in the calculations.
     """
 
-    def generate_cohort_x_from_mrs_scores(self):
+    def generate_cohort_fixed_prob_from_mrs_scores(self):
         """
-        Generate x values for a set of pre-stroke mRS scores.
+        Generate fixed probabilities for a set of pre-stroke mRS scores.
 
         Treat the different stroke types separately as they have
         different pre-stroke mRS distributions. For each pre-stroke mRS,
-        find the range of allowed values of x and generate an x score
-        in this range for each relevant patient.
+        find the range of allowed values of fixed probability and
+        generate a fixed probability score in this range for
+        each relevant patient.
         """
         # Calculate these separately for nLVO, LVO, and "other"
         # patient subgroups.
@@ -687,7 +709,7 @@ class Discrete_outcome:
         # inds_other = np.where(self.trial['stroke_type_code'].data == 0)[0]
 
         inds = [inds_nlvo, inds_lvo]
-        x_full_cohort = np.full(
+        fixed_prob_full_cohort = np.full(
             self.trial['stroke_type_code'].data.shape,
             0.0
             )
@@ -700,17 +722,17 @@ class Discrete_outcome:
                 f'pre_stroke_{stroke_type}']
             # Whack a zero at the front:
             mrs_dist = np.append(0.0, mrs_dist)
-            # Generate x scores:
-            x_scores = self.assign_x_by_mrs_score_uniform(
+            # Generate fixed probability scores:
+            fixed_prob_scores = self.assign_fixed_prob_by_mrs_score_uniform(
                 mrs_scores_here, mrs_dist)
             # Place these scores in the full cohort array:
-            x_full_cohort[inds_here] = x_scores
-        return x_full_cohort
+            fixed_prob_full_cohort[inds_here] = fixed_prob_scores
+        return fixed_prob_full_cohort
 
-    def assign_x_by_mrs_score_uniform(
+    def assign_fixed_prob_by_mrs_score_uniform(
             self, mrs_scores: npt.ArrayLike, mrs_dist: npt.ArrayLike):
         """
-        Convert mRS scores to x values by random uniform sampling.
+        Convert mRS scores to fixed probabilities by random uniform sampling.
 
         Inputs:
         mrs_scores - np.array. One mRS score per patient.
@@ -719,28 +741,28 @@ class Discrete_outcome:
                      and begin with a leading 0.0 for mRS < 0.
 
         Returns:
-        x_scores   - np.array. One "x" score per patient.
+        fixed_prob_scores   - np.array. One fixed probability per patient.
         """
-        # Initially set all "x" to Not A Number.
-        x_scores = np.full(mrs_scores.size, np.NaN)
+        # Initially set all fixed probability to Not A Number.
+        fixed_prob_scores = np.full(mrs_scores.size, np.NaN)
         for mRS in range(7):
             # Which patients have this mRS score?
             inds_here = np.where(mrs_scores == mRS)[0]
-            # What are the x values allowed to be?
+            # What are the fixed probabilities allowed to be?
             lower_bound = mrs_dist[mRS]
             upper_bound = mrs_dist[mRS + 1]
-            # Randomly select some x values in this range:
-            x_here = np.random.uniform(
+            # Randomly select some fixed probabilities in this range:
+            fixed_prob_here = np.random.uniform(
                 low=lower_bound, high=upper_bound, size=len(inds_here))
             # Store in the full group array:
-            x_scores[inds_here] = x_here
-        return x_scores
+            fixed_prob_scores[inds_here] = fixed_prob_here
+        return fixed_prob_scores
 
-    def generate_cohort_mrs_scores_from_x(self):
+    def generate_cohort_mrs_scores_from_fixed_probs(self):
         """
-        Convert the "x" scores to pre-stroke mRS scores.
+        Convert the fixed probabilities to pre-stroke mRS scores.
 
-        This is used when "x" scores are not provided by the user.
+        This is used when fixed probabilities are not provided by the user.
         """
         # Calculate these separately for nLVO, LVO, and "other"
         # patient subgroups.
@@ -751,13 +773,13 @@ class Discrete_outcome:
         # Initially set everyone to mRS 0:
         mRS_scores_full_cohort = np.full(
             len(self.trial['stroke_type_code'].data), 0)
-        # Convert each subgroup's "x" values to mRS...
-        mRS_nlvo = self.find_mrs_score_from_x(
-            self.trial['x_pre_stroke'].data[inds_nlvo],
+        # Convert each subgroup's fixed probabilities to mRS...
+        mRS_nlvo = self.find_mrs_score_from_fixed_prob(
+            self.trial['fixed_prob_pre_stroke'].data[inds_nlvo],
             self.mrs_distribution_probs['pre_stroke_nlvo']
             )
-        mRS_lvo = self.find_mrs_score_from_x(
-            self.trial['x_pre_stroke'].data[inds_lvo],
+        mRS_lvo = self.find_mrs_score_from_fixed_prob(
+            self.trial['fixed_prob_pre_stroke'].data[inds_lvo],
             self.mrs_distribution_probs['pre_stroke_lvo']
             )
         # ... and update these values in the full array:
@@ -767,24 +789,25 @@ class Discrete_outcome:
         # initial mRS value set above (0).
         return mRS_scores_full_cohort
 
-    def find_mrs_score_from_x(
+    def find_mrs_score_from_fixed_prob(
             self,
-            x: npt.ArrayLike or float,
+            fixed_prob: npt.ArrayLike or float,
             mrs_dist: npt.ArrayLike or float
             ):
         """
-        Convert an x score to mRS score using an mRS distribution.
+        Convert fixed probability to mRS score using an mRS distribution.
 
         Inputs:
         -------
-        x        - float or array. One x score per patient.
-        mrs_dist - array. mRS cumulative probability distribution to
-                   sample from. It should begin with a leading zero.
+        fixed_prob - float or array. One fixed probability
+                     per patient.
+        mrs_dist   - array. mRS cumulative probability distribution to
+                     sample from. It should begin with a leading zero.
 
         Returns:
         float or array. One mRS score per patient.
         """
-        return np.digitize(x, mrs_dist).astype(float)
+        return np.digitize(fixed_prob, mrs_dist).astype(float)
 
     """
     ##############################
@@ -805,7 +828,7 @@ class Discrete_outcome:
             self,
             post_stroke_probs: npt.ArrayLike,
             not_treated_probs: npt.ArrayLike,
-            x_each_patient: npt.ArrayLike,
+            fixed_prob_each_patient: npt.ArrayLike,
             mask_treated: npt.ArrayLike
             ):
         """
@@ -813,17 +836,17 @@ class Discrete_outcome:
 
         Inputs:
         -------
-        post_stroke_probs - x by 7 ndarray.
-                            Previously-calculated mRS dists for all
-                            patients in the array post-stroke.
-                            The mRS dist of the nth patient is
-                            post_stroke_probs[n, :].
-        not_treated_probs - 1 by 7 array. mRS dist for
-                            the patients who receive no treatment.
-        x_each_patient    - array of x floats. The x scores for all
-                            patients.
-        mask_treated      - array of x bools. Whether each patient
-                            received this treatment.
+        post_stroke_probs       - x by 7 ndarray.
+                                  Previously-calculated mRS dists for all
+                                  patients in the array post-stroke.
+                                  The mRS dist of the nth patient is
+                                  post_stroke_probs[n, :].
+        not_treated_probs       - 1 by 7 array. mRS dist for
+                                  the patients who receive no treatment.
+        fixed_prob_each_patient - array of x floats. The fixed
+                                  probabilities for all patients.
+        mask_treated            - array of x bools. Whether each patient
+                                  received this treatment.
 
         Returns:
         --------
@@ -875,19 +898,20 @@ class Discrete_outcome:
         # + not treated
         # calculate the mRS bin that each patient would fall into.
         results['each_patient_mrs_not_treated'] = (                 # x floats
-            self.find_mrs_score_from_x(x_each_patient,
-                                       not_treated_probs))
+            self.find_mrs_score_from_fixed_prob(
+                fixed_prob_each_patient, not_treated_probs))
         # Reset invalid patient values to NaN:
         results['each_patient_mrs_not_treated'][inds_invalid] = np.NaN
         # Loop over each patient to get a different set of post-stroke
         # mRS bins in each case.
         each_patient_mrs_post_stroke = []
-        for i, x in enumerate(x_each_patient):
+        for i, fixed_prob in enumerate(fixed_prob_each_patient):
             mRS_dist = post_stroke_probs[i, :]
             if np.any(np.isnan(mRS_dist)):
                 mRS_here = np.NaN
             else:
-                mRS_here = self.find_mrs_score_from_x(x, mRS_dist)
+                mRS_here = self.find_mrs_score_from_fixed_prob(
+                    fixed_prob, mRS_dist)
             each_patient_mrs_post_stroke.append(mRS_here)
         results['each_patient_mrs_post_stroke'] = (
             np.array(each_patient_mrs_post_stroke))                 # x floats

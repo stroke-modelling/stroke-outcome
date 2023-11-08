@@ -13,8 +13,6 @@ import numpy as np
 from importlib_resources import files
 import numpy.typing as npt  # For type hinting.
 
-from .evaluated_array import Evaluated_array
-
 
 def import_mrs_dists_from_file():
     """Import cumulative mRS distributions as pandas DataFrame."""
@@ -70,19 +68,33 @@ def import_utility_dists_from_file():
     return utility_dists, utility_dists_notes
 
 
-def assign_patient_data(
-        data_df: pd.DataFrame,
-        trial: dict
-        ):
+def assign_patient_data(data_df: pd.DataFrame, trial: dict):
     """
+    Pass a dataframe's data to the trial dictionary.
 
-    # Assume that this input dataframe has column names that
-    # match keys in the trial dictionary.
+    Assumes that this input dataframe has column names that
+    match keys in the trial dictionary. The trial keys can
+    be found in the separate outcome model classes.
+
+    Inputs:
+    -------
+    data_df - pd.DataFrame. The patient data. Any columns with names
+              matching keys in the trial dictionary will be used to
+              overwrite the trial dictionary values.
+    trial   - dict. The existing trial dictionary. Each entry is an
+              array of the same length as in data_df.
+
+    Returns:
+    --------
+    trial - dict. The input trial dictionary with some data updated.
     """
+    # For each entry in the trial dictionary...
     for key in list(trial.keys()):
+        # ... check if the same name is a column of the dataframe...
         if key in data_df.columns:
-            trial[key].data = data_df[key].values
-
+            # ... and if so, overwrite the trial dictionary's data
+            # with data from that column of the dataframe.
+            trial[key].data = data_df[key].to_numpy()
     return trial
 
 
@@ -93,6 +105,11 @@ def sanity_check_input_mrs_dists(mrs_dists: pd.DataFrame):
     Checks that all of the values in the DataFrame are numbers
     and that each mRS distribution has a name.
     """
+    if len(mrs_dists) < 1:
+        # If nothing was provided by the user, then
+        # import the mRS dists from file now.
+        mrs_dists, mrs_dists_notes = import_mrs_dists_from_file()
+
     # ##### Checks for mRS dists #####
     # Check that everything in the mRS dist arrays is a number.
     # Check that the dtype of each column of data is int or float.
@@ -103,12 +120,15 @@ def sanity_check_input_mrs_dists(mrs_dists: pd.DataFrame):
     )
     if check_all_mrs_values_are_numbers_bool is False:
         exc_string = '''Some of the input mRS values are not numbers'''
-        raise TypeException(exc_string) from None
+        raise TypeError(exc_string) from None
 
     # Check that the pandas array has a named index column.
     if mrs_dists.index.dtype not in ['O']:
         print('The input mRS distributions might be improperly labelled.')
         # Just print warning, don't stop the code.
+
+    # Return in case mRS distributions were imported from file here:
+    return mrs_dists
 
 
 def sanity_check_mrs_dists_for_stroke_type(
@@ -190,67 +210,21 @@ def sanity_check_utility_weights(utility_weights: npt.ArrayLike):
     if np.size(utility_weights) == 7:
         # Use ravel() to ensure array shape of (7, ).
         return utility_weights.ravel()
+    else:
+        utility_weights_default = np.array(
+            [0.97, 0.88, 0.74, 0.55, 0.20, -0.19, 0.00])
 
-    utility_weights_default = np.array(
-        [0.97, 0.88, 0.74, 0.55, 0.20, -0.19, 0.00])
+        if len(utility_weights) > 0:
+            # i.e. if this isn't the default blank list:
+            print(''.join([
+                'Problem with the input utility weights. ',
+                'Expected one weight per mRS score from 0 to 6. ',
+                'Setting self.utility_weights to default values: ',
+                f'{utility_weights_default}'
+                ]))
 
-    if len(utility_weights) > 0:
-        # i.e. if this isn't the default blank list:
-        print(''.join([
-            'Problem with the input utility weights. ',
-            'Expected one weight per mRS score from 0 to 6. ',
-            'Setting self.utility_weights to default values: ',
-            f'{utility_weights_default}'
-            ]))
-
-    # Use the Wang et al. 2020 values:
-    return utility_weights_default
-
-
-# def sanity_check_trial_input_lengths(trial: dict, number_of_patients: int):
-#     """
-#     Check that all user input arrays have the expected length.
-
-#     The rest of the code assumes that all patient data arrays
-#     have the same length, so if there's a problem then flag it up here.
-#     """
-#     # Do an extra check that the number of patients is matched
-#     # by all arrays in case the value was updated after
-#     # initialisation.
-#     patient_array_labels = [
-#         'stroke type (code)',
-#         'time to IVT (mins)',
-#         'received IVT (bool)',
-#         'time to MT (mins)',
-#         'received MT (bool)',
-#         'IVT no effect (bool)',
-#         'MT no effect (bool)'
-#     ]
-#     patient_array_vars = [
-#         trial['stroke_type_code'].data,
-#         trial['onset_to_needle_mins'].data,
-#         trial['ivt_chosen_bool'].data,
-#         trial['onset_to_puncture_mins'].data,
-#         trial['mt_chosen_bool'].data,
-#         trial['ivt_no_effect_bool'].data,
-#         trial['mt_no_effect_bool'].data
-#         ]
-#     length_warning_str = ''.join([
-#         'The following patient data arrays contain a different number ',
-#         'of patients than the instance value of ',
-#         f'{number_of_patients}:',
-#         '\n'
-#         ])
-#     for (val, key) in zip(patient_array_vars, patient_array_labels):
-#         if len(val) != number_of_patients:
-#             print(length_warning_str + '- ' + key +
-#                   f', length {len(val)}')
-#             length_warning_str = ''
-
-#     # #############################################################################################
-#     # change this to check the length fo each list,
-#     # store it, check all are the same,
-#     # and then set taht to be the number of patients in the trial.
+        # Use the Wang et al. 2020 values:
+        return utility_weights_default
 
 
 def extract_mrs_probs_and_logodds(mrs_dists: pd.DataFrame):

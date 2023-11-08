@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import numpy.typing as npt  # For type hinting.
+import warnings
 
 from .evaluated_array import Evaluated_array
 import stroke_outcome.outcome_utilities as ou
@@ -26,7 +27,6 @@ class Continuous_outcome:
       6) LVO treated with IVT at time of no-effect (includes treatment deaths)
       7) LVO treated at t=0 (time of stroke onset) with IVT
       8) LVO treated with IVT at time of no-effect (includes treatment deaths)
-    number_of_patients      - int. The number of patients in the array.
     utility_weights         - np.array. The utility weight for each mRS
                               score. Contains seven values.
     ivt_time_no_effect_mins - float. Time of no effect for
@@ -64,10 +64,10 @@ class Continuous_outcome:
     The output arrays contain x values, one for each patient.
     Contents of returned dictionary:
     - each_patient_mrs_dist_post_stroke                     x by 7 grid
-    - each_patient_mrs_post_stroke                        x floats
-    - each_patient_mrs_shift                              x floats
-    - each_patient_utility_post_stroke                    x floats
-    - each_patient_utility_shift                          x floats
+    - each_patient_mrs_post_stroke                             x floats
+    - each_patient_mrs_shift                                   x floats
+    - each_patient_utility_post_stroke                         x floats
+    - each_patient_utility_shift                               x floats
     - mean_mrs_post_stroke                                      1 float
     - mean_mrs_shift                                            1 float
     - mean_utility                                              1 float
@@ -122,8 +122,7 @@ class Continuous_outcome:
     Then run the main calculate_outcomes() function.
     Example:
         # Initiate the object:
-        continuous_outcome = Continuous_outcome(
-            mrs_dists={pandas dataframe}, number_of_patients=100)
+        continuous_outcome = Continuous_outcome(mrs_dists={pandas dataframe})
         # Import patient data:
         continuous_outcome.trial['onset_to_needle_mins'].data = {array 1}
         continuous_outcome.trial['ivt_chosen_bool'].data = {array 2}
@@ -158,8 +157,7 @@ class Continuous_outcome:
 
     def __init__(
             self,
-            mrs_dists: pd.DataFrame,
-            # number_of_patients: int,
+            mrs_dists: pd.DataFrame = pd.DataFrame(),
             utility_weights: npt.ArrayLike = np.array([]),
             ivt_time_no_effect_mins: float = 378.0,
             mt_time_no_effect_mins: float = 480.0
@@ -198,7 +196,9 @@ class Continuous_outcome:
         """
         self.name = "Continuous clinical outcome model"
 
-        ou.sanity_check_input_mrs_dists(mrs_dists)
+        # Use either the user input "mrs_dists" or load them from
+        # file if none were provided. Check that it all makes sense:
+        mrs_dists = ou.sanity_check_input_mrs_dists(mrs_dists)
         # Store the input for the repr() string.
         self.mrs_dists_input = mrs_dists
 
@@ -215,31 +215,9 @@ class Continuous_outcome:
         # Store utility weightings for mRS 0-6
         self.utility_weights = ou.sanity_check_utility_weights(utility_weights)
 
-        #
-        # # ##### Patient data setup #####
-        # # All arrays must contain this many values:
-        # self.number_of_patients = number_of_patients
-
-        # # Evaluated_array(
-        # #    number_of_patients, valid_dtypes_list, valid_min, valid_max)
-        # n = self.number_of_patients  # Defined to shorten the following.
-        # self.trial = dict(
-        #     stroke_type_code=Evaluated_array(n, ['int'], 0, 2),
-        #     onset_to_needle_mins=Evaluated_array(n, ['float'], 0.0, np.inf),
-        #     ivt_chosen_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-        #     ivt_no_effect_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-        #     onset_to_puncture_mins=Evaluated_array(
-        #         n, ['float'], 0.0, np.inf),
-        #     mt_chosen_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-        #     mt_no_effect_bool=Evaluated_array(n, ['int', 'bool'], 0, 1),
-        # )
-
     def __str__(self):
         """Prints info when print(Instance) is called."""
-        print_str = ''.join([
-            f'There are {self.number_of_patients} patients ',
-            'and the base mRS distributions are: ',
-        ])
+        print_str = 'The base mRS distributions are: '
         for (key, val) in zip(
                 self.mrs_distribution_probs.keys(),
                 self.mrs_distribution_probs.values()
@@ -280,7 +258,6 @@ class Continuous_outcome:
         return ''.join([
             'Continous_outcome(',
             f'mrs_dists=DATAFRAME*, '
-            f'number_of_patients={self.number_of_patients}',
             f'utility_weights={self.utility_weights}',
             f'ivt_time_no_effect_mins={self.ivt_time_no_effect_mins}',
             f'mt_time_no_effect_mins={self.mt_time_no_effect_mins})',
@@ -298,15 +275,26 @@ class Continuous_outcome:
 
     These functions set up where the data will be stored.
     """
-    def create_new_blank_trial_dict(self, n):
+    def _create_new_blank_trial_dict(self, n: int):
         """
-        Different outcome models have different dictionary contents
-        so can't use a shared utility here.
+        Create a new trial dictionary for this model type.
 
+        By default, the dictionary contents are arrays of length "n"
+        and all placeholder values of zero in the required data type.
+        The dictionary contents are defined here but the method
+        to update them is assign_patient_data() in outcome_utilities.
+
+        Inputs:
+        -------
         n - int. number of patients.
+
+        Returns:
+        --------
+        trial - dict. The dictionary with placeholder data.
         """
-        # Evaluated_array(
-        #    number_of_patients, valid_dtypes_list, valid_min, valid_max, name)
+        # Each placeholder array has the format:
+        # Evaluated_array(number_of_patients, valid_dtypes_list,
+        #                 valid_min, valid_max, name)
         trial = dict(
             stroke_type_code=Evaluated_array(
                 n, ['int'], 0, 2, 'stroke type code'),
@@ -325,10 +313,21 @@ class Continuous_outcome:
         )
         return trial
 
-
-    def check_trial_dict_for_new_data(self, data_df):
+    def _check_trial_dict_for_new_data(self, data_df: pd.DataFrame):
         """
-        check trial dict, see if needs updating,then apply data
+        Updates self.trial dictionary with patient data.
+
+        If there is an existing self.trial dictionary and each entry
+        contains data for the same number of patients as in the input
+        data_df, then the existing dictionary is updated. Otherwise
+        a new trial dictionary is created.
+
+        Inputs:
+        -------
+        data_df - pd.DataFrame. Dataframe containing the patient data.
+                  This should have some columns with names matching the
+                  keys of self.trial dictionary. To see those keys,
+                  look at _create_new_blank_trial_dict().
         """
 
         # Number of patients in this new data:
@@ -338,34 +337,48 @@ class Continuous_outcome:
             trial = self.trial
             make_new_trial_dict = False
 
+            # Sanity check:
             # Number of patients in existing trial dictionary:
             nt = len(list(trial.values())[0].data)
-
-            # If function run again with a different number of patients,
-            # delete the existing trial dict and create a new one?
-            # Should at least give a warning in case it's accidental. ???????????????????????????????/
-            make_new_trial_dict = True if n != nt else False
-
-        except: # check error name
+            # If the numbers of patients do not match...
+            if n != nt:
+                # ... create a new trial dictionary for the new
+                # number of patients.
+                make_new_trial_dict = True
+                # Print a warning in case this was accidental.
+                warning_message = ''.join([
+                    'Previous patient data has been deleted because this ',
+                    'new data has a different number of patients.'
+                    ])
+                warnings.warn(warning_message)
+        except AttributeError:
+            # self.trial does not exist, so make a new trial dict:
             make_new_trial_dict = True
 
-        # Need to pass through the trial dictionary somehow.
-        # try except because it might not yet have been created??
-
         if make_new_trial_dict:
-            trial = self.create_new_blank_trial_dict(n)
+            trial = self._create_new_blank_trial_dict(n)
             # Save to self:
             self.trial = trial
 
-
-    def assign_patients_to_trial(self, data_df):
+    def assign_patients_to_trial(self, data_df: pd.DataFrame):
         """
-        ?
-        """
-        self.check_trial_dict_for_new_data(data_df)
+        Prepare input data for use in the model.
 
+        Inputs:
+        -------
+        data_df - pd.DataFrame. Contains the patient data. Any column
+                  with a name that matches a key in the trial dict
+                  will be used to update the trial dictionary.
+        """
+        # Check if an existing self.trial object is compatible with the
+        # input data, and if not then create a new self.trial dict.
+        self._check_trial_dict_for_new_data(data_df)
+
+        # Copy over applicable parts of the patient data to update
+        # the trial dictionary:
         trial = ou.assign_patient_data(data_df, self.trial)
 
+        # Store the updated trial dictionary in self:
         self.trial = trial
 
     """
@@ -424,9 +437,6 @@ class Continuous_outcome:
         - mean_utility_shift                                    1 float
         """
         # ##### Sanity checks #####
-        # ou.sanity_check_trial_input_lengths(
-        #     self.trial, self.number_of_patients)
-
         # Check if anyone has an nLVO and receives MT
         # (for which we don't have mRS probability distributions)
         self.trial['stroke_type_code'].data = (
@@ -740,7 +750,7 @@ class Continuous_outcome:
         # mean values:
         results['utility_not_treated'] = np.sum(
             not_treated_util)                                        # 1 float
-        results['utility_no_effect'] = np.sum(no_effect_util)   # 1 float
+        results['utility_no_effect'] = np.sum(no_effect_util)        # 1 float
         results['each_patient_utility_post_stroke'] = np.sum(
             post_stroke_util, axis=1)                               # x floats
         # Change from not-treated distribution:
@@ -753,13 +763,13 @@ class Continuous_outcome:
         # e.g. patients who have nLVO when we're calculating
         # results for patients with LVOs.
         results['valid_patients_mean_mrs_shift'] = (
-            np.nanmean(results['each_patient_mrs_shift'])       # 1 float
+            np.nanmean(results['each_patient_mrs_shift'])            # 1 float
             if len(np.where(~np.isnan(
                 results['each_patient_mrs_shift']))[0]) > 0
             else np.NaN
             )
         results['valid_patients_mean_utility_shift'] = (
-            np.nanmean(results['each_patient_utility_shift'])   # 1 float
+            np.nanmean(results['each_patient_utility_shift'])        # 1 float
             if len(np.where(~np.isnan(
                 results['each_patient_utility_shift']))[0]) > 0
             else np.NaN
@@ -906,26 +916,26 @@ class Continuous_outcome:
 
         # Average these results over all patients:
         mean_mrs_post_stroke = \
-            np.nanmean(each_patient_mrs_post_stroke)            # 1 float
+            np.nanmean(each_patient_mrs_post_stroke)                 # 1 float
         mean_mrs_shift = \
-            np.nanmean(each_patient_mrs_shift)                  # 1 float
+            np.nanmean(each_patient_mrs_shift)                       # 1 float
         mean_utility = \
-            np.nanmean(each_patient_utility_post_stroke)        # 1 float
+            np.nanmean(each_patient_utility_post_stroke)             # 1 float
         mean_utility_shift = \
-            np.nanmean(each_patient_utility_shift)              # 1 float
+            np.nanmean(each_patient_utility_shift)                   # 1 float
 
         # Create dictionary for combined full cohort outcomes:
         full_cohort_outcomes = dict(
             each_patient_mrs_dist_post_stroke=(
                 each_patient_mrs_dist_post_stroke),              # x by 7 grid
             each_patient_mrs_post_stroke=(
-                each_patient_mrs_post_stroke),                 # x floats
+                each_patient_mrs_post_stroke),                      # x floats
             each_patient_mrs_shift=(
-                each_patient_mrs_shift),                       # x floats
+                each_patient_mrs_shift),                            # x floats
             each_patient_utility_post_stroke=(
-                each_patient_utility_post_stroke),             # x floats
+                each_patient_utility_post_stroke),                  # x floats
             each_patient_utility_shift=(
-                each_patient_utility_shift),                   # x floats
+                each_patient_utility_shift),                        # x floats
             mean_mrs_post_stroke=mean_mrs_post_stroke,               # 1 float
             mean_mrs_shift=mean_mrs_shift,                           # 1 float
             mean_utility=mean_utility,                               # 1 float
