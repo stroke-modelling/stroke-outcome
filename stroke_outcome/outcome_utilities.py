@@ -94,7 +94,16 @@ def assign_patient_data(data_df: pd.DataFrame, trial: dict):
         if key in data_df.columns:
             # ... and if so, overwrite the trial dictionary's data
             # with data from that column of the dataframe.
-            trial[key].data = data_df[key].to_numpy()
+            trial[key].data = data_df[key].to_numpy().copy()
+            # Keep the .copy() here to prevent updating the
+            # original input data frame if the contents of trial
+            # are changed later.
+            if 'stroke_type_code' in key:
+                # Make sure this is stored in both stroke_type_code
+                # and stroke_type_code_on_input:
+                for trial_key in ['stroke_type_code',
+                                  'stroke_type_code_on_input']:
+                    trial[trial_key].data = data_df[key].to_numpy().copy()
     return trial
 
 
@@ -960,3 +969,23 @@ def _merge_results_dicts(
             final_dict[new_key] = value
 
     return final_dict
+
+
+def _convert_eval_dict_to_dict(eval_dict: dict):
+    """
+    Convert a dictionary containing Evaluated_array to normal arrays.
+
+    Inputs:
+    -------
+    eval_dict - dict. Dictionary containing Evaluated_array values.
+
+    Returns:
+    --------
+    normal_dict - dict. Dictionary containing the same data as in the
+                  original dictionary, but now in standard np.arrays.
+    """
+    normal_dict = {}
+    for key in list(eval_dict.keys()):
+        val = eval_dict[key].data
+        normal_dict[key] = val
+    return normal_dict

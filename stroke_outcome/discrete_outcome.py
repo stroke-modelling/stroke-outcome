@@ -308,6 +308,11 @@ class Discrete_outcome:
         The dictionary contents are defined here but the method
         to update them is assign_patient_data() in outcome_utilities.
 
+        The syntax `trial[key].data` makes the patient data pass
+        through a series of sanity checks in the class. The checks make
+        sure that the data is of the expected type and sits in the
+        expected range.
+
         Inputs:
         -------
         n - int. number of patients.
@@ -322,6 +327,8 @@ class Discrete_outcome:
         trial = dict(
             stroke_type_code=Evaluated_array(
                 n, ['int'], 0, 2, 'stroke type code'),
+            stroke_type_code_on_input=Evaluated_array(
+                n, ['int'], 0, 2, 'stroke type code on input'),
             onset_to_needle_mins=Evaluated_array(
                 n, ['float'], 0.0, np.inf, 'onset to needle (mins)'),
             ivt_chosen_bool=Evaluated_array(
@@ -557,7 +564,16 @@ class Discrete_outcome:
         # Get the mean results for the full cohort:
         full_cohort_outcomes = self._calculate_patient_outcomes(
             outcomes_by_stroke_type_and_treatment)
-        return outcomes_by_stroke_type_and_treatment, full_cohort_outcomes
+
+        # ##### Data storage #####
+        # Convert the patient data used by the model to a normal
+        # dictionary and return this too.
+        patient_data_dict = ou._convert_eval_dict_to_dict(self.trial)
+
+        return (patient_data_dict,
+                outcomes_by_stroke_type_and_treatment,
+                full_cohort_outcomes
+                )
 
     """
     ####################
@@ -1085,12 +1101,18 @@ class Discrete_outcome:
         # When both treatments give the same shift in mRS,
         # arbitrarily prioritise the MT data over IVT.
         inds_lvo_ivt_better_than_mt = np.where(
-            dict_results_by_category['lvo_ivt_each_patient_mrs_shift'] <
-            dict_results_by_category['lvo_mt_each_patient_mrs_shift']
+            (dict_results_by_category['lvo_ivt_each_patient_mrs_shift'] <
+             dict_results_by_category['lvo_mt_each_patient_mrs_shift']) &
+            (self.trial['stroke_type_code'].data == 2) &
+            (self.trial['ivt_chosen_bool'].data > 0) &
+            (self.trial['mt_chosen_bool'].data > 0)
             )[0]
         inds_lvo_mt_better_than_ivt = np.where(
-            dict_results_by_category['lvo_mt_each_patient_mrs_shift'] <=
-            dict_results_by_category['lvo_ivt_each_patient_mrs_shift']
+            (dict_results_by_category['lvo_mt_each_patient_mrs_shift'] <=
+             dict_results_by_category['lvo_ivt_each_patient_mrs_shift']) &
+            (self.trial['stroke_type_code'].data == 2) &
+            (self.trial['ivt_chosen_bool'].data > 0) &
+            (self.trial['mt_chosen_bool'].data > 0)
             )[0]
 
         inds = [inds_lvo_not_mt, inds_lvo_mt_only, inds_nlvo_ivt,
