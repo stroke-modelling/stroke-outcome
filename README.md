@@ -57,7 +57,20 @@ The following images summarise the differences between the methods:
 ![Summary of continuous method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is the mean across the distribution.](https://raw.githubusercontent.com/stroke-modelling/stroke-outcome/main/docs/images/continuous_example.png) ![Summary of discrete method. There is an mRS distribution when treated and an mRS distribution when not treated. The patient's mRS is selected from whichever part of the distribution contains a fixed cumulative probability score.](https://raw.githubusercontent.com/stroke-modelling/stroke-outcome/main/docs/images/discrete_example.png)
 
 
-## 📚 External resources
+## 📚 Resources
+
+### Data
+
+The data can be downloaded without needing to use python or to install the `stroke-outcome` package.
+
+To find the data:
+1. Go to the [GitHub repository](https://github.com/stroke-modelling/stroke-outcome/)
+2. Enter the folder `stroke_outcome`
+3. Enter the folder `data` 
+4. Click on the name of the file you would like to download
+5. On the file preview page, click on the "Download raw file" button 📥
+
+### Docs
 
 The following resources are not included within the package files and are accessible on the GitHub repository.
 
